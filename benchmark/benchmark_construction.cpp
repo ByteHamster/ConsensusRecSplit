@@ -12,10 +12,16 @@
 
 size_t numObjects = 1e6;
 size_t numQueries = 1e6;
-double overhead = 0.1;
+double spaceOverhead = 0.1;
 
-template <size_t lineSize, typename offsetType>
+template <size_t n, double overhead>
 void construct() {
+    if (n != numObjects) {
+        throw std::logic_error("Wrong input size");
+    } else if (overhead != spaceOverhead) {
+        throw std::logic_error("Wrong input size");
+    }
+
     auto time = std::chrono::system_clock::now();
     long seed = std::chrono::duration_cast<std::chrono::milliseconds>(time.time_since_epoch()).count();
     bytehamster::util::XorShift64 prng(seed);
@@ -33,7 +39,7 @@ void construct() {
     std::cout<<"Constructing"<<std::endl;
     sleep(1);
     auto beginConstruction = std::chrono::high_resolution_clock::now();
-    consensus::Consensus hashFunc(keys, overhead);
+    consensus::Consensus<n, overhead> hashFunc(keys);
     unsigned long constructionDurationMs = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::high_resolution_clock::now() - beginConstruction).count();
 
@@ -83,24 +89,6 @@ void construct() {
               << std::endl;
 }
 
-template <typename offsetType>
-void dispatchLineSize(size_t lineSize) {
-    if (lineSize == 1024) {
-        construct<1024, offsetType>();
-    } else if (lineSize == 512) {
-        construct<512, offsetType>();
-    } else if (lineSize == 256) {
-        construct<256, offsetType>();
-    } else if (lineSize == 128) {
-        construct<128, offsetType>();
-    } else if (lineSize == 64) {
-        construct<64, offsetType>();
-
-    } else {
-        std::cerr<<"Invalid line size"<<std::endl;
-    }
-}
-
 int main(int argc, const char* const* argv) {
     size_t lineSize = 256;
     size_t offsetSize = 16;
@@ -110,18 +98,16 @@ int main(int argc, const char* const* argv) {
     cmd.add_bytes('q', "numQueries", numQueries, "Number of queries to measure");
     cmd.add_bytes('l', "lineSize", lineSize, "Size of a cache line");
     cmd.add_bytes('o', "offsetSize", offsetSize, "Number of bits for offset");
-    cmd.add_double('e', "overhead", overhead, "Overhead parameter");
+    cmd.add_double('e', "overhead", spaceOverhead, "Overhead parameter");
 
     if (!cmd.process(argc, argv)) {
         return 1;
     }
 
-    if (offsetSize == 16) {
-        dispatchLineSize<uint16_t>(lineSize);
-    } else if (offsetSize == 32) {
-        dispatchLineSize<uint32_t>(lineSize);
+    if (numObjects == 1024) {
+        construct<1024, 0.01>();
     } else {
-        std::cerr<<"Invalid offset size"<<std::endl;
+        std::cerr<<"Invalid n, only powers of 2 supported"<<std::endl;
     }
 
     return 0;
