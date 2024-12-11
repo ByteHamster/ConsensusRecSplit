@@ -13,7 +13,7 @@ class UnalignedBitVector {
          * Read a full 64-bit word at the unaligned bit position.
          * The bit position refers to the right-most bit to read.
          */
-        uint64_t readAt(size_t bitPosition) const {
+        [[nodiscard]] uint64_t readAt(size_t bitPosition) const {
             return 0;
         }
 
@@ -25,7 +25,7 @@ class UnalignedBitVector {
 
         }
 
-        size_t bitSize() const {
-            return 0;
+        [[nodiscard]] size_t bitSize() const {
+            return bits.size() * 64;
         }
 };
