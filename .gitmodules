@@ -1,0 +1,9 @@
+[submodule "extlib/tlx"]
+	path = extlib/tlx
+	url = https://github.com/tlx/tlx.git
+[submodule "extlib/util"]
+	path = extlib/util
+	url = https://github.com/ByteHamster/Util.git
+[submodule "extlib/ips2ra"]
+	path = extlib/ips2ra
+	url = https://github.com/ips4o/ips2ra.git
