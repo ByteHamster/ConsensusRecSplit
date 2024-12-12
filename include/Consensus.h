@@ -9,6 +9,7 @@
 #include <bytehamster/util/Function.h>
 
 #include "consensus/UnalignedBitVector.h"
+#include "consensus/util.h"
 
 namespace consensus {
 
@@ -18,10 +19,6 @@ constexpr std::array<double, 21> optimalBitsForSplit = {0, 1.00000000000000, 1.4
             5.32610028514914, 5.82592417496365, 6.32583611985253, 6.82579209229467, 7.32577007851546, 7.82575907162581,
             8.32575356818099, 8.82575081645857, 9.32574944059737, 9.82574875266676, 10.3257484087015};
 
-static constexpr size_t intLog2(size_t x) {
-    return std::bit_width(x) - 1;
-}
-
 template <size_t n, double overhead>
 struct SplittingTreeStorage {
     static constexpr size_t logn = intLog2(n);
@@ -30,7 +27,7 @@ struct SplittingTreeStorage {
         std::array<double, logn> array;
         for (size_t level = 0; level < logn; level++) {
             array[level] = optimalBitsForSplit[logn - level]
-                    + overhead / 3.4 * std::sqrt(double(1ul << (logn - level)));
+                    + overhead / 3.4 * constexpr_sqrt(double(1ul << (logn - level)));
             // "Textbook" Consensus would just add the overhead here.
             // Instead, give more overhead to larger levels (where each individual trial is more expensive).
         }
