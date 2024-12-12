@@ -90,13 +90,11 @@ void construct() {
 }
 
 int main(int argc, const char* const* argv) {
-    size_t lineSize = 256;
     size_t offsetSize = 16;
 
     tlx::CmdlineParser cmd;
     cmd.add_bytes('n', "numObjects", numObjects, "Number of objects to construct with");
     cmd.add_bytes('q', "numQueries", numQueries, "Number of queries to measure");
-    cmd.add_bytes('l', "lineSize", lineSize, "Size of a cache line");
     cmd.add_bytes('o', "offsetSize", offsetSize, "Number of bits for offset");
     cmd.add_double('e', "overhead", spaceOverhead, "Overhead parameter");
 
@@ -104,8 +102,8 @@ int main(int argc, const char* const* argv) {
         return 1;
     }
 
-    if (numObjects == 1024) {
-        construct<1024, 0.01>();
+    if (numObjects == 16) {
+        construct<16, 0.01>();
     } else {
         std::cerr<<"Invalid n, only powers of 2 supported"<<std::endl;
     }

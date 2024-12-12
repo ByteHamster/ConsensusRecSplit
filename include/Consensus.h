@@ -21,7 +21,7 @@ static constexpr size_t intLog2(size_t x) {
 }
 
 template <size_t n, double overhead>
-struct SplittingTask {
+struct SplittingTreeStorage {
     static constexpr size_t logn = intLog2(n);
 
     static constexpr std::array<double, logn> fillFractionalBits() {
@@ -34,40 +34,61 @@ struct SplittingTask {
 
     static constexpr std::array<double, logn> fractionalBitsForSplitOnLevel = fillFractionalBits();
 
-    size_t level;
-    size_t index;
-    size_t taskSizeThisLevel = 0;
-    size_t tasksThisLevel = 0;
-    uint64_t seedMask = 0;
-    uint64_t currentSeed = 0;
-    uint64_t lastSeed = 0;
-    UnalignedBitVector &storage;
-
-    SplittingTask(size_t level, size_t index, UnalignedBitVector &storage)
-            : level(level), index(index), storage(storage) {
-        updateProperties();
-    }
-
-    void updateProperties() {
-        taskSizeThisLevel = 1ul << (logn - level);
-        tasksThisLevel = n / taskSizeThisLevel;
-        SplittingTask nextTask = *this;
-        nextTask.next();
-        size_t startPosition = seedStartPosition();
-        size_t seedWidth = nextTask.seedStartPosition() - startPosition;
-        seedMask = ((1ul << seedWidth) - 1);
-        currentSeed = storage.readAt(startPosition);
-        lastSeed = currentSeed | seedMask;
-    }
-
-    size_t seedStartPosition() {
+    static size_t seedStartPosition(size_t level, size_t index) {
         // Warning: Trying to lazily determine the position of an adjacent task using floating point
         // calculations can lead to different results than calling this method with the next task.
         double bits = 0;
         for (size_t l = 0; l < level; l++) {
             bits += fractionalBitsForSplitOnLevel[l] * (1ul << l);
         }
-        return bits + fractionalBitsForSplitOnLevel[level] * index;
+        return std::ceil(bits + fractionalBitsForSplitOnLevel[level] * index);
+    }
+
+    static size_t totalSize() {
+        // Warning: Trying to lazily determine the position of an adjacent task using floating point
+        // calculations can lead to different results than calling this method with the next task.
+        double bits = 0;
+        for (size_t l = 0; l < logn; l++) {
+            bits += fractionalBitsForSplitOnLevel[l] * (1ul << l);
+        }
+        return std::ceil(bits);
+    }
+};
+
+template <size_t n, double overhead>
+struct SplittingTask {
+    static constexpr size_t logn = intLog2(n);
+
+    size_t level;
+    size_t index;
+    size_t taskSizeThisLevel = 0;
+    size_t tasksThisLevel = 0;
+    size_t endPosition = 0;
+    size_t seedWidth = 0;
+    uint64_t seedMask = 0;
+    uint64_t currentSeed = 0;
+    uint64_t maxSeed = 0;
+    UnalignedBitVector &storage;
+    size_t positionOffset;
+
+    SplittingTask(size_t level, size_t index, UnalignedBitVector &storage, size_t positionOffset)
+            : level(level), index(index), storage(storage), positionOffset(positionOffset) {
+        updateProperties();
+    }
+
+    void updateProperties() {
+        taskSizeThisLevel = 1ul << (logn - level);
+        tasksThisLevel = n / taskSizeThisLevel;
+        size_t startPosition = SplittingTreeStorage<n, overhead>::seedStartPosition(level, index);
+        if (index + 1 < tasksThisLevel) {
+            endPosition = SplittingTreeStorage<n, overhead>::seedStartPosition(level, index + 1);
+        } else {
+            endPosition = SplittingTreeStorage<n, overhead>::seedStartPosition(level + 1, 0);
+        }
+        seedWidth = endPosition - startPosition;
+        seedMask = ((1ul << seedWidth) - 1);
+        currentSeed = storage.readAt(endPosition + positionOffset);
+        maxSeed = currentSeed | seedMask;
     }
 
     void next() {
@@ -75,18 +96,18 @@ struct SplittingTask {
         if (index == tasksThisLevel) {
             index = 0;
             level++;
-            updateProperties();
         }
+        updateProperties();
     }
 
     void previous() {
         if (index == 0) {
             level--;
-            updateProperties();
-            index = tasksThisLevel;
+            index = n / (1ul << (logn - level)) - 1;
         } else {
             index--;
         }
+        updateProperties();
     }
 
     bool isEnd() {
@@ -99,7 +120,7 @@ struct SplittingTask {
 
     void setSeed(uint64_t seed) {
         currentSeed = seed;
-        storage.writeTo(seedStartPosition(), currentSeed);
+        storage.writeTo(endPosition + positionOffset, currentSeed);
     }
 
     void resetSeed() {
@@ -119,13 +140,15 @@ class Consensus {
         UnalignedBitVector unalignedBitVector;
 
         explicit Consensus(std::span<const uint64_t> keys)
-                : unalignedBitVector(n * 1.5f) { // TODO use a proper size
+                : unalignedBitVector(64 + SplittingTreeStorage<n, overhead>::totalSize()) {
             if (keys.size() != n) {
                 throw std::logic_error("Wrong input size");
             }
+            std::cout << "Tree space: " << SplittingTreeStorage<n, overhead>::totalSize() << std::endl;
             std::vector<uint64_t> modifiableKeys(keys.begin(), keys.end());
 
             for (size_t rootSeed = 0; rootSeed < 1000; rootSeed++) {
+                unalignedBitVector.writeTo(64, rootSeed);
                 if (construct(modifiableKeys)) {
                     return;
                 }
@@ -141,11 +164,14 @@ class Consensus {
         }
 
         [[nodiscard]] size_t operator()(uint64_t key) {
-            SplittingTask<n, overhead> task(0, 0, unalignedBitVector);
+            SplittingTask<n, overhead> task(0, 0, unalignedBitVector, 64);
+            // Offset 64 for root seed. Later: Size of previous buckets
             for (size_t level = 0; level < logn; level++) {
                 task.setLevel(level);
-                if (!toLeft(key, task.currentSeed)) {
-                    task.index += n / (1ul << level);
+                if (toLeft(key, task.currentSeed)) {
+                    task.index = 2 * task.index;
+                } else {
+                    task.index = 2 * task.index + 1;
                 }
             }
             return task.index;
@@ -153,12 +179,13 @@ class Consensus {
 
     private:
         bool construct(std::span<uint64_t> keys) {
-            SplittingTask<n, overhead> task(0, 0, unalignedBitVector);
+            SplittingTask<n, overhead> task(0, 0, unalignedBitVector, 64);
+            // Offset 64 for root seed. Later: Size of previous buckets
             while (!task.isEnd()) {
                 std::span<uint64_t> keysThisTask = keys.subspan(task.index * task.taskSizeThisLevel, task.taskSizeThisLevel);
                 bool success = false;
                 uint64_t seed;
-                for (seed = task.currentSeed; seed < task.lastSeed; seed++) {
+                for (seed = task.currentSeed; seed <= task.maxSeed; seed++) {
                     if (isSeedSuccessful(keysThisTask, seed)) {
                         success = true;
                         break;
@@ -170,11 +197,14 @@ class Consensus {
                     task.setSeed(seed);
                     task.next();
                 } else {
-                    task.resetSeed();
-                    if (task.isFirst()) {
-                        return false;
-                    }
-                    task.previous();
+                    do {
+                        task.resetSeed();
+                        if (task.isFirst()) {
+                            return false;
+                        }
+                        task.previous();
+                    } while (task.currentSeed == task.maxSeed);
+                    task.currentSeed++;
                 }
             }
             return true;
