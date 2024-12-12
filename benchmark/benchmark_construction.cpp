@@ -89,24 +89,27 @@ void construct() {
               << std::endl;
 }
 
-int main(int argc, const char* const* argv) {
-    size_t offsetSize = 16;
+template <size_t I>
+void dispatchInputSize(size_t param) {
+    if constexpr (I <= 1) {
+        std::cerr<<"The parameter "<<param<<" for the input size was not compiled into this binary."<<std::endl;
+    } else if (I == param) {
+        construct<I, 0.01>();
+    } else {
+        dispatchInputSize<I / 2>(param);
+    }
+}
 
+int main(int argc, const char* const* argv) {
     tlx::CmdlineParser cmd;
     cmd.add_bytes('n', "numObjects", numObjects, "Number of objects to construct with");
     cmd.add_bytes('q', "numQueries", numQueries, "Number of queries to measure");
-    cmd.add_bytes('o', "offsetSize", offsetSize, "Number of bits for offset");
     cmd.add_double('e', "overhead", spaceOverhead, "Overhead parameter");
 
     if (!cmd.process(argc, argv)) {
         return 1;
     }
 
-    if (numObjects == 16) {
-        construct<16, 0.01>();
-    } else {
-        std::cerr<<"Invalid n, only powers of 2 supported"<<std::endl;
-    }
-
+    dispatchInputSize<1ul << 20>(numObjects);
     return 0;
 }
