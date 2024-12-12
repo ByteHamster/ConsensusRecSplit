@@ -29,7 +29,10 @@ struct SplittingTreeStorage {
     static constexpr std::array<double, logn> fillFractionalBits() {
         std::array<double, logn> array;
         for (size_t level = 0; level < logn; level++) {
-            array[level] = optimalBitsForSplit[logn - level] + overhead;
+            array[level] = optimalBitsForSplit[logn - level]
+                    + overhead / 3.4 * std::sqrt(double(1ul << (logn - level)));
+            // "Textbook" Consensus would just add the overhead here.
+            // Instead, give more overhead to larger levels (where each individual trial is more expensive).
         }
         return array;
     }
