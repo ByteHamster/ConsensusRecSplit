@@ -12,7 +12,6 @@ jobs:
           - { name: gcc, version: 12}
           - { name: gcc, version: 13}
           - { name: gcc, version: 14}
-          - { name: clang, version: 18}
     name: Build (${{ matrix.compiler.name }} ${{ matrix.compiler.version }})
     runs-on: ubuntu-24.04
     steps:

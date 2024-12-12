@@ -26,8 +26,9 @@ struct SplittingTreeStorage {
     static constexpr std::array<double, logn> fillFractionalBits() {
         std::array<double, logn> array;
         for (size_t level = 0; level < logn; level++) {
+            double size = 1ul << (logn - level);
             array[level] = optimalBitsForSplit[logn - level]
-                    + overhead / 3.4 * constexpr_sqrt(double(1ul << (logn - level)));
+                    + overhead / 3.4 * std::pow(size, 0.75);
             // "Textbook" Consensus would just add the overhead here.
             // Instead, give more overhead to larger levels (where each individual trial is more expensive).
         }
@@ -36,14 +37,24 @@ struct SplittingTreeStorage {
 
     static constexpr std::array<double, logn> fractionalBitsForSplitOnLevel = fillFractionalBits();
 
+    static constexpr std::array<double, logn+1> fillLevelSizePrefix() {
+        std::array<double, logn+1> array;
+        for (size_t level = 0; level <= logn; level++) {
+            double bits = 0;
+            for (size_t l = 0; l < level; l++) {
+                bits += fractionalBitsForSplitOnLevel[l] * (1ul << l);
+            }
+            array[level] = bits;
+        }
+        return array;
+    }
+
+    static constexpr std::array<double, logn+1> levelSizePrefix = fillLevelSizePrefix();
+
     static size_t seedStartPosition(size_t level, size_t index) {
         // Warning: Trying to lazily determine the position of an adjacent task using floating point
         // calculations can lead to different results than calling this method with the next task.
-        double bits = 0;
-        for (size_t l = 0; l < level; l++) {
-            bits += fractionalBitsForSplitOnLevel[l] * (1ul << l);
-        }
-        return std::ceil(bits + fractionalBitsForSplitOnLevel[level] * index);
+        return std::ceil(levelSizePrefix[level] + fractionalBitsForSplitOnLevel[level] * index);
     }
 
     static size_t totalSize() {
