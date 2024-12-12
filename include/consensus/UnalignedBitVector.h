@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <cstdint>
+#include <iomanip>
 
 namespace consensus {
 class UnalignedBitVector {
@@ -46,9 +47,9 @@ class UnalignedBitVector {
 
         void print() const {
             for (uint64_t val : bits) {
-                std::cout<<std::format("{:016x} ", val, val, val);
+                std::cout << std::setfill('0') << std::setw(16) << std::right << std::hex << val << " ";
             }
-            std::cout<<std::endl;
+            std::cout << std::dec << std::endl;
         }
 };
 } // namespace consensus
