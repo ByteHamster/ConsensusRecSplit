@@ -14,84 +14,9 @@
 
 namespace consensus {
 
-template <size_t n, double overhead>
-struct SplittingTask {
-    static constexpr size_t logn = intLog2(n);
-
-    size_t level;
-    size_t index;
-    size_t taskSizeThisLevel = 0;
-    size_t tasksThisLevel = 0;
-    size_t endPosition = 0;
-    size_t seedWidth = 0;
-    uint64_t seedMask = 0;
-    uint64_t currentSeed = 0;
-    uint64_t maxSeed = 0;
-    UnalignedBitVector &storage;
-    size_t positionOffset;
-
-    SplittingTask(size_t level, size_t index, UnalignedBitVector &storage, size_t positionOffset)
-            : level(level), index(index), storage(storage), positionOffset(positionOffset) {
-        updateProperties();
-    }
-
-    void updateProperties() {
-        taskSizeThisLevel = 1ul << (logn - level);
-        tasksThisLevel = n / taskSizeThisLevel;
-        size_t startPosition = SplittingTreeStorage<n, overhead>::seedStartPosition(level, index);
-        if (index + 1 < tasksThisLevel) {
-            endPosition = SplittingTreeStorage<n, overhead>::seedStartPosition(level, index + 1);
-        } else {
-            endPosition = SplittingTreeStorage<n, overhead>::seedStartPosition(level + 1, 0);
-        }
-        seedWidth = endPosition - startPosition;
-        seedMask = ((1ul << seedWidth) - 1);
-        currentSeed = storage.readAt(endPosition + positionOffset);
-        maxSeed = currentSeed | seedMask;
-    }
-
-    void next() {
-        index++;
-        if (index == tasksThisLevel) {
-            index = 0;
-            level++;
-        }
-        updateProperties();
-    }
-
-    void previous() {
-        if (index == 0) {
-            level--;
-            index = n / (1ul << (logn - level)) - 1;
-        } else {
-            index--;
-        }
-        updateProperties();
-    }
-
-    bool isEnd() {
-        return level >= logn;
-    }
-
-    bool isFirst() {
-        return level + index == 0;
-    }
-
-    void setSeed(uint64_t seed) {
-        currentSeed = seed;
-        storage.writeTo(endPosition + positionOffset, currentSeed);
-    }
-
-    void resetSeed() {
-        setSeed(currentSeed & ~seedMask);
-    }
-
-    void setLevel(size_t level_) {
-        level = level_;
-        updateProperties();
-    }
-};
-
+/**
+ * Perfect hash function using the consensus idea: Combined search and encoding of successful seeds.
+ */
 template <size_t n, double overhead>
 class Consensus {
     public:
@@ -111,7 +36,7 @@ class Consensus {
 
             for (size_t rootSeed = 0; rootSeed < (1ul << (ROOT_SEED_BITS - 1)); rootSeed++) {
                 unalignedBitVector.writeTo(ROOT_SEED_BITS, rootSeed);
-                if (construct(modifiableKeys, ROOT_SEED_BITS)) {
+                if (construct(modifiableKeys)) {
                     return;
                 }
             }
@@ -126,11 +51,11 @@ class Consensus {
             return this->operator()(bytehamster::util::MurmurHash64(key));
         }
 
-        [[nodiscard]] size_t operator()(uint64_t key) {
-            SplittingTask<n, overhead> task(0, 0, unalignedBitVector, ROOT_SEED_BITS);
+        [[nodiscard]] size_t operator()(uint64_t key) const {
+            SplittingTask<n, overhead> task(0, 0);
             for (size_t level = 0; level < logn; level++) {
                 task.setLevel(level);
-                if (toLeft(key, task.currentSeed)) {
+                if (toLeft(key, readSeed(task))) {
                     task.index = 2 * task.index;
                 } else {
                     task.index = 2 * task.index + 1;
@@ -140,13 +65,14 @@ class Consensus {
         }
 
     private:
-        bool construct(std::span<uint64_t> keys, size_t storagePositionOffset) {
-            SplittingTask<n, overhead> task(0, 0, unalignedBitVector, storagePositionOffset);
-            while (!task.isEnd()) {
+        bool construct(std::span<uint64_t> keys) {
+            SplittingTask<n, overhead> task(0, 0);
+            uint64_t seed = readSeed(task);
+            while (true) {
                 std::span<uint64_t> keysThisTask = keys.subspan(task.index * task.taskSizeThisLevel, task.taskSizeThisLevel);
                 bool success = false;
-                uint64_t seed;
-                for (seed = task.currentSeed; seed <= task.maxSeed; seed++) {
+                uint64_t maxSeed = seed | task.seedMask;
+                for (; seed <= maxSeed; seed++) {
                     if (isSeedSuccessful(keysThisTask, seed)) {
                         success = true;
                         break;
@@ -155,20 +81,27 @@ class Consensus {
                 if (success) {
                     std::partition(keysThisTask.begin(), keysThisTask.end(),
                                    [&](uint64_t key) { return toLeft(key, seed); });
-                    task.setSeed(seed);
+                    writeSeed(task, seed);
                     task.next();
+                    if (task.isEnd()) {
+                        return true;
+                    }
+                    seed = readSeed(task);
                 } else {
+                    seed--; // Was incremented beyond max seed, set back to max
                     do {
-                        task.resetSeed();
+                        seed &= ~task.seedMask; // Reset seed to 0
+                        writeSeed(task, seed);
                         if (task.isFirst()) {
-                            return false;
+                            return false; // Can't backtrack further, fail
                         }
                         task.previous();
-                    } while (task.currentSeed == task.maxSeed);
-                    task.currentSeed++;
+                        seed = readSeed(task);
+                    } while ((seed & task.seedMask) == task.seedMask); // Backtrack all tasks that are at their max seed
+                    seed++; // Start backtracked task with its next seed candidate
                 }
             }
-            return true;
+            throw std::logic_error("Should never arrive here, function returns from within the loop");
         }
 
         bool isSeedSuccessful(std::span<uint64_t> keys, uint64_t seed) {
@@ -181,6 +114,14 @@ class Consensus {
 
         [[nodiscard]] bool toLeft(uint64_t key, uint64_t seed) const {
             return bytehamster::util::remix(key + seed) % 2;
+        }
+
+        uint64_t readSeed(SplittingTask<n, overhead> task) const {
+            return unalignedBitVector.readAt(task.endPosition + ROOT_SEED_BITS);
+        }
+
+        void writeSeed(SplittingTask<n, overhead> task, uint64_t seed) {
+            unalignedBitVector.writeTo(task.endPosition + ROOT_SEED_BITS, seed);
         }
 };
 } // namespace consensus
