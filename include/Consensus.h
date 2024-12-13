@@ -23,48 +23,40 @@ template <size_t n, double overhead>
 struct SplittingTreeStorage {
     static constexpr size_t logn = intLog2(n);
 
-    static constexpr std::array<double, logn> fillFractionalBits() {
-        std::array<double, logn> array;
+    static constexpr std::array<size_t, logn> fillMicroBitsForSplit() {
+        // MicroBits instead of double to avoid rounding inconsistencies and for much faster evaluation
+        std::array<size_t, logn> array;
         for (size_t level = 0; level < logn; level++) {
             double size = 1ul << (logn - level);
-            array[level] = optimalBitsForSplit[logn - level]
-                    + overhead / 3.4 * std::pow(size, 0.75);
+            double bits = optimalBitsForSplit[logn - level] + overhead / 3.4 * std::pow(size, 0.75);
             // "Textbook" Consensus would just add the overhead here.
             // Instead, give more overhead to larger levels (where each individual trial is more expensive).
+            array[level] = std::ceil(1024.0 * 1024.0 * bits);
         }
         return array;
     }
 
-    static constexpr std::array<double, logn> fractionalBitsForSplitOnLevel = fillFractionalBits();
+    static constexpr std::array<size_t, logn> microBitsForSplitOnLevel = fillMicroBitsForSplit();
 
-    static constexpr std::array<double, logn+1> fillLevelSizePrefix() {
-        std::array<double, logn+1> array;
-        for (size_t level = 0; level <= logn; level++) {
-            double bits = 0;
-            for (size_t l = 0; l < level; l++) {
-                bits += fractionalBitsForSplitOnLevel[l] * (1ul << l);
-            }
-            array[level] = bits;
+    static constexpr std::array<size_t, logn + 1> fillMicroBitsLevelSize() {
+        std::array<size_t, logn + 1> array;
+        size_t microBits = 0;
+        for (size_t level = 0; level < logn; level++) {
+            array[level] = microBits;
+            microBits += microBitsForSplitOnLevel[level] * (1ul << level);
         }
+        array[logn] = microBits;
         return array;
     }
 
-    static constexpr std::array<double, logn+1> levelSizePrefix = fillLevelSizePrefix();
+    static constexpr std::array<size_t, logn + 1> microBitsLevelSize = fillMicroBitsLevelSize();
 
     static size_t seedStartPosition(size_t level, size_t index) {
-        // Warning: Trying to lazily determine the position of an adjacent task using floating point
-        // calculations can lead to different results than calling this method with the next task.
-        return std::ceil(levelSizePrefix[level] + fractionalBitsForSplitOnLevel[level] * index);
+        return (microBitsLevelSize[level] + microBitsForSplitOnLevel[level] * index + 1024 * 1024 - 1) / (1024 * 1024);
     }
 
     static size_t totalSize() {
-        // Warning: Trying to lazily determine the position of an adjacent task using floating point
-        // calculations can lead to different results than calling this method with the next task.
-        double bits = 0;
-        for (size_t l = 0; l < logn; l++) {
-            bits += fractionalBitsForSplitOnLevel[l] * (1ul << l);
-        }
-        return std::ceil(bits);
+        return (microBitsLevelSize[logn] + 1024 * 1024 - 1) / (1024 * 1024);
     }
 };
 
