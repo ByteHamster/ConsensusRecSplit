@@ -52,7 +52,7 @@ class Consensus {
         }
 
         [[nodiscard]] size_t operator()(uint64_t key) const {
-            SplittingTask<n, overhead> task(0, 0);
+            SplittingTaskIterator<n, overhead> task(0, 0);
             for (size_t level = 0; level < logn; level++) {
                 task.setLevel(level);
                 if (toLeft(key, readSeed(task))) {
@@ -66,9 +66,9 @@ class Consensus {
 
     private:
         bool construct(std::span<uint64_t> keys) {
-            SplittingTask<n, overhead> task(0, 0);
+            SplittingTaskIterator<n, overhead> task(0, 0);
             uint64_t seed = readSeed(task);
-            while (true) {
+            while (true) { // Basically "while (!task.isEnd())"
                 std::span<uint64_t> keysThisTask = keys.subspan(task.index * task.taskSizeThisLevel, task.taskSizeThisLevel);
                 bool success = false;
                 uint64_t maxSeed = seed | task.seedMask;
@@ -112,15 +112,15 @@ class Consensus {
             return numToLeft == (keys.size() / 2);
         }
 
-        [[nodiscard]] bool toLeft(uint64_t key, uint64_t seed) const {
+        [[nodiscard]] static bool toLeft(uint64_t key, uint64_t seed) {
             return bytehamster::util::remix(key + seed) % 2;
         }
 
-        uint64_t readSeed(SplittingTask<n, overhead> task) const {
+        [[nodiscard]] uint64_t readSeed(SplittingTaskIterator<n, overhead> task) const {
             return unalignedBitVector.readAt(task.endPosition + ROOT_SEED_BITS);
         }
 
-        void writeSeed(SplittingTask<n, overhead> task, uint64_t seed) {
+        void writeSeed(SplittingTaskIterator<n, overhead> task, uint64_t seed) {
             unalignedBitVector.writeTo(task.endPosition + ROOT_SEED_BITS, seed);
         }
 };

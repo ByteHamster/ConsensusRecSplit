@@ -55,11 +55,11 @@ class SplittingTreeStorage {
 
     public:
         static size_t seedStartPosition(size_t level, size_t index) {
-            return (microBitsLevelSize[level] + microBitsForSplitOnLevel[level] * index + 1024 * 1024 - 1) / (1024 * 1024);
+            return (microBitsLevelSize[level] + microBitsForSplitOnLevel[level] * index) / (1024 * 1024);
         }
 
         static constexpr size_t totalSize() {
-            return (microBitsLevelSize[logn] + 1024 * 1024 - 1) / (1024 * 1024);
+            return microBitsLevelSize[logn] / (1024 * 1024);
         }
 };
 
@@ -69,7 +69,7 @@ class SplittingTreeStorage {
  * The storage has to be in the same order as the search for consensus to work.
  */
 template <size_t n, double overhead>
-struct SplittingTask {
+struct SplittingTaskIterator {
     static constexpr size_t logn = intLog2(n);
 
     size_t level;
@@ -80,7 +80,7 @@ struct SplittingTask {
     size_t seedWidth = 0;
     uint64_t seedMask = 0;
 
-    SplittingTask(size_t level, size_t index) : level(level), index(index) {
+    SplittingTaskIterator(size_t level, size_t index) : level(level), index(index) {
         updateProperties();
     }
 

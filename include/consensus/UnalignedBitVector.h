@@ -5,6 +5,9 @@
 #include <iomanip>
 
 namespace consensus {
+/**
+ * A bit vector where we can read/write any 64-bit slice without it having to be byte-aligned.
+ */
 class UnalignedBitVector {
         std::vector<uint64_t> bits;
     public:
@@ -14,6 +17,7 @@ class UnalignedBitVector {
         /**
          * Read a full 64-bit word at the unaligned bit position.
          * The bit position refers to the right-most bit to read.
+         * The smallest position that can be read is 64.
          */
         [[nodiscard]] uint64_t readAt(size_t bitPosition) const {
             assert(bitPosition >= 64);
