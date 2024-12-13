@@ -1,8 +1,8 @@
 cmake_minimum_required (VERSION 3.25)
 cmake_policy(SET CMP0048 NEW)
-project(Consensus LANGUAGES CXX)
+project(ConsensusRecSplit LANGUAGES CXX)
 
-if(TARGET Consensus)
+if(TARGET ConsensusRecSplit)
     return()
 endif()
 
@@ -34,11 +34,11 @@ endif()
 
 # ---------------------------- Library Setup ----------------------------
 
-add_library(Consensus INTERFACE)
-target_include_directories(Consensus INTERFACE include)
-target_compile_features(Consensus INTERFACE cxx_std_20)
-target_link_libraries(Consensus INTERFACE ips2ra ByteHamster::Util)
-add_library(Consensus::consensus ALIAS Consensus)
+add_library(ConsensusRecSplit INTERFACE)
+target_include_directories(ConsensusRecSplit INTERFACE include)
+target_compile_features(ConsensusRecSplit INTERFACE cxx_std_20)
+target_link_libraries(ConsensusRecSplit INTERFACE ips2ra ByteHamster::Util)
+add_library(ConsensusRecSplit::consensusrecsplit ALIAS ConsensusRecSplit)
 
 # ---------------------------- Benchmarks ----------------------------
 if(PROJECT_IS_TOP_LEVEL)
@@ -47,8 +47,8 @@ if(PROJECT_IS_TOP_LEVEL)
     target_link_libraries(BenchmarkUtils INTERFACE tlx ByteHamster::Util)
 
     # Warnings if this is the main project
-    #target_compile_options(Consensus INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -Wpedantic -Werror -frecord-gcc-switches>)
+    target_compile_options(ConsensusRecSplit INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -Wpedantic -Werror -frecord-gcc-switches>)
 
     add_executable(Benchmark benchmark/benchmark_construction.cpp)
-    target_link_libraries(Benchmark PUBLIC BenchmarkUtils Consensus)
+    target_link_libraries(Benchmark PUBLIC BenchmarkUtils ConsensusRecSplit)
 endif()

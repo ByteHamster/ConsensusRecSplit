@@ -6,7 +6,7 @@
 #include <tlx/cmdline_parser.hpp>
 
 #include "BenchmarkData.h"
-#include "Consensus.h"
+#include "ConsensusRecSplit.h"
 
 #define DO_NOT_OPTIMIZE(value) asm volatile("" : : "r,m"(value) : "memory")
 
@@ -39,7 +39,7 @@ void construct() {
     std::cout<<"Constructing"<<std::endl;
     sleep(1);
     auto beginConstruction = std::chrono::high_resolution_clock::now();
-    consensus::Consensus<n, overhead> hashFunc(keys);
+    consensus::ConsensusRecSplit<n, overhead> hashFunc(keys);
     unsigned long constructionDurationMs = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::high_resolution_clock::now() - beginConstruction).count();
 
@@ -92,7 +92,7 @@ void construct() {
 template <size_t I>
 void dispatchInputSize(size_t param) {
     if constexpr (I <= 1) {
-        std::cerr<<"The parameter "<<param<<" for the input size was not compiled into this binary."<<std::endl;
+        std::cerr << "The parameter " << param << " for the input size was not compiled into this binary." << std::endl;
     } else if (I == param) {
         construct<I, 0.01>();
     } else {

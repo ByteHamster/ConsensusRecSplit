@@ -18,7 +18,7 @@ namespace consensus {
  * Perfect hash function using the consensus idea: Combined search and encoding of successful seeds.
  */
 template <size_t n, double overhead>
-class Consensus {
+class ConsensusRecSplit {
     public:
         static_assert(1ul << intLog2(n) == n, "n must be a power of 2");
         static_assert(overhead > 0);
@@ -26,7 +26,7 @@ class Consensus {
         static constexpr size_t logn = intLog2(n);
         UnalignedBitVector unalignedBitVector;
 
-        explicit Consensus(std::span<const uint64_t> keys)
+        explicit ConsensusRecSplit(std::span<const uint64_t> keys)
                 : unalignedBitVector(ROOT_SEED_BITS + SplittingTreeStorage<n, overhead>::totalSize()) {
             if (keys.size() != n) {
                 throw std::logic_error("Wrong input size");
@@ -106,8 +106,8 @@ class Consensus {
 
         bool isSeedSuccessful(std::span<uint64_t> keys, uint64_t seed) {
             size_t numToLeft = 0;
-            for (size_t i = 0; i < keys.size(); i++) {
-                numToLeft += toLeft(keys[i], seed);
+            for (uint64_t key : keys) {
+                numToLeft += toLeft(key, seed);
             }
             return numToLeft == (keys.size() / 2);
         }
