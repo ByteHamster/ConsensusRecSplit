@@ -24,7 +24,7 @@ constexpr std::array<uint32_t, THRESHOLD_RANGE> _fill_mapping() {
     array.at(0) = 0; // Last resort
     array.at(1) = std::numeric_limits<uint32_t>::max() / 3; // Safeguard, so much bumping should never happen in practice
     size_t interpolationRangeSteps = THRESHOLD_RANGE - 3;
-    size_t interpolationRange = std::numeric_limits<uint32_t>::max() / 3;
+    size_t interpolationRange = std::numeric_limits<uint32_t>::max() / 10;
     size_t interpolationRangeStart = std::numeric_limits<uint32_t>::max() - interpolationRange;
     size_t interpolationRangeStep = interpolationRange / interpolationRangeSteps;
     for (size_t i = 0; i < interpolationRangeSteps; i++) {
@@ -36,8 +36,8 @@ constexpr std::array<uint32_t, THRESHOLD_RANGE> _fill_mapping() {
 
 template <size_t k>
 class BumpedKPerfectHashFunction {
-        static constexpr double OVERLOAD_FACTOR = 0.9;
-        static constexpr size_t THRESHOLD_BITS = tlx::integer_log2_floor(k) + 5;
+        static constexpr double OVERLOAD_FACTOR = 0.97;
+        static constexpr size_t THRESHOLD_BITS = tlx::integer_log2_floor(k) - 1;
         static constexpr size_t THRESHOLD_RANGE = 1ul << THRESHOLD_BITS;
         static constexpr std::array<uint32_t, THRESHOLD_RANGE> THRESHOLD_MAPPING = _fill_mapping<THRESHOLD_RANGE, k>();
 
@@ -75,8 +75,8 @@ class BumpedKPerfectHashFunction {
             for (size_t layer = 0; layer < 2; layer++) {
                 size_t layerBase = layerBases.back();
                 if (layer != 0) {
-                    bucketsThisLayer = OVERLOAD_FACTOR * (hashes.size() / k);
-                    bucketsThisLayer = std::min(bucketsThisLayer, nbuckets - layerBase);
+                    assert(layer == 1);
+                    bucketsThisLayer = nbuckets - layerBases.back();
                     if (bucketsThisLayer == 0) {
                         layers = 1;
                         break;
