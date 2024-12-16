@@ -101,6 +101,26 @@ void dispatchInputSize(size_t param) {
 }
 
 int main(int argc, const char* const* argv) {
+    constexpr size_t k = 10000;
+    bytehamster::util::XorShift64 prng(42);
+    std::vector<uint64_t> keys;
+    for (size_t i = 0; i < 1000000; i++) {
+        keys.push_back(prng());
+    }
+    consensus::BumpedKPerfectHashFunction<k> bkphf(keys);
+    std::vector<size_t> buckets(keys.size() / k);
+    for (size_t i = 0; i < keys.size(); i++) {
+        size_t bucket = bkphf(keys.at(i));
+        buckets.at(bucket)++;
+        assert(buckets.at(bucket) <= k);
+    }
+    std::cout<<1.0f*bkphf.getBits()/keys.size()<<std::endl;
+    bkphf.printBits();
+    return 0;
+
+
+
+
     tlx::CmdlineParser cmd;
     cmd.add_bytes('n', "numObjects", numObjects, "Number of objects to construct with");
     cmd.add_bytes('q', "numQueries", numQueries, "Number of queries to measure");

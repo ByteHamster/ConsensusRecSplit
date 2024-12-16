@@ -11,6 +11,7 @@
 
 #include "consensus/UnalignedBitVector.h"
 #include "consensus/SplittingTreeStorage.h"
+#include "consensus/BumpedKPerfectHashFunction.h"
 
 namespace consensus {
 
