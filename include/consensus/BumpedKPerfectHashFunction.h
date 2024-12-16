@@ -134,14 +134,14 @@ class BumpedKPerfectHashFunction {
             }
         }
 
-        uint32_t compact_threshold(uint32_t threshold) {
-            // Binary search would be better here, but this doesn't matter much for performance anyway
-            for (size_t i = 0; i < THRESHOLD_RANGE; i++) {
-                if (threshold <= THRESHOLD_MAPPING[i]) {
-                    return i;
-                }
+        uint32_t compact_threshold(uint32_t threshold) const {
+            // Threshold 0 is reserved as a safeguard for bumping all
+            constexpr size_t interpolationRange = std::numeric_limits<uint32_t>::max() / 10;
+            constexpr size_t minThreshold = std::numeric_limits<uint32_t>::max() - interpolationRange;
+            if (threshold < minThreshold) {
+                return 1;
             }
-            return THRESHOLD_MAPPING.back();
+            return 1 + (THRESHOLD_RANGE - 1) * (threshold - minThreshold) / interpolationRange;
         }
 
         void flushBucket(size_t layerBase, size_t bucketStart, size_t i, size_t bucketIdx,
@@ -163,9 +163,8 @@ class BumpedKPerfectHashFunction {
                     threshold--;
                 }
                 thresholds.set(layerBase + bucketIdx, threshold);
-                uint32_t uncompressedThreshold = THRESHOLD_MAPPING[threshold];
                 for (size_t l = 0; l < bucketSize; l++) {
-                    if (hashes.at(bucketStart + l).threshold > uncompressedThreshold) {
+                    if (compact_threshold(hashes.at(bucketStart + l).threshold) > threshold) {
                         bumpedKeys.push_back(hashes.at(bucketStart + l));
                         if (l < k) {
                             freePositions.push_back(layerBase + bucketIdx);
@@ -207,7 +206,7 @@ class BumpedKPerfectHashFunction {
                 uint32_t bucket = ::bytehamster::util::fastrange32(mhc & 0xffffffff, layerSize);
                 uint32_t threshold = mhc >> 32;
                 uint64_t storedThreshold = thresholds.at(base + bucket);
-                if (threshold <= THRESHOLD_MAPPING[storedThreshold]) {
+                if (compact_threshold(threshold) <= storedThreshold) {
                     return base + bucket;
                 }
             }
