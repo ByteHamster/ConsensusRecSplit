@@ -18,8 +18,9 @@ namespace consensus {
  */
 template <size_t k>
 class BumpedKPerfectHashFunction {
-        static constexpr double OVERLOAD_FACTOR = 0.97;
-        static constexpr size_t THRESHOLD_TRIMMING = 10; // Thresholds smaller than 1-1/t are not represented
+        static constexpr double OVERLOAD_FACTOR = k <= 256 ? 0.9 : (k <= 16384 ? 0.95 : 0.97);
+        // Thresholds smaller than 1-1/t are not represented
+        static constexpr size_t THRESHOLD_TRIMMING = k <= 8 ? 2 : (k <= 256 ? 3 : (k <= 512 ? 4 : 8));
         static constexpr size_t THRESHOLD_BITS = tlx::integer_log2_floor(k) - 1;
         static constexpr size_t THRESHOLD_RANGE = 1ul << THRESHOLD_BITS;
 
