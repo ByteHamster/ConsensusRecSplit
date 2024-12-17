@@ -22,6 +22,7 @@ class BumpedKPerfectHashFunction {
         // Thresholds smaller than 1-1/t are not represented
         static constexpr size_t THRESHOLD_TRIMMING = k <= 8 ? 2 : (k <= 256 ? 3 : (k <= 512 ? 4 : 8));
         static constexpr size_t THRESHOLD_BITS = tlx::integer_log2_floor(k) - 1;
+        static_assert(THRESHOLD_BITS < 64);
         static constexpr size_t THRESHOLD_RANGE = 1ul << THRESHOLD_BITS;
 
         struct LayerInfo {
@@ -43,7 +44,7 @@ class BumpedKPerfectHashFunction {
         pasta::BitVector freePositionsBv;
         pasta::FlatRankSelect<pasta::OptimizedFor::ONE_QUERIES> *freePositionsRankSelect = nullptr;
     public:
-        explicit BumpedKPerfectHashFunction(std::span<uint64_t> keys)
+        explicit BumpedKPerfectHashFunction(std::span<const uint64_t> keys)
                 : N(keys.size()), thresholds(N / k) {
             size_t nbuckets = N / k;
             size_t keysInEndBucket = N - nbuckets * k;
@@ -99,6 +100,10 @@ class BumpedKPerfectHashFunction {
                 }
                 hashes = bumpedKeys;
                 //std::cout<<"Bumped in layer "<<layer<<": "<<hashes.size()<<std::endl;
+            }
+
+            if (hashes.empty()) {
+                return; // Nothing to repair
             }
 
             std::vector<uint64_t> fallbackHashes;

@@ -71,27 +71,31 @@ class SplittingTreeStorage {
 template <size_t n, double overhead>
 struct SplittingTaskIterator {
     static constexpr size_t logn = intLog2(n);
+    using TreeStorage = SplittingTreeStorage<n, overhead>;
 
     size_t level;
     size_t index;
+    size_t bucket;
+    const size_t nbuckets;
     size_t taskSizeThisLevel = 0;
     size_t tasksThisLevel = 0;
     size_t endPosition = 0;
     size_t seedWidth = 0;
     uint64_t seedMask = 0;
 
-    SplittingTaskIterator(size_t level, size_t index) : level(level), index(index) {
+    SplittingTaskIterator(size_t level, size_t index, size_t bucket, size_t nbuckets)
+            : level(level), index(index), bucket(bucket), nbuckets(nbuckets) {
         updateProperties();
     }
 
     void updateProperties() {
         taskSizeThisLevel = 1ul << (logn - level);
         tasksThisLevel = n / taskSizeThisLevel;
-        size_t startPosition = SplittingTreeStorage<n, overhead>::seedStartPosition(level, index);
+        size_t startPosition = bucket * TreeStorage::totalSize() + TreeStorage::seedStartPosition(level, index);
         if (index + 1 < tasksThisLevel) {
-            endPosition = SplittingTreeStorage<n, overhead>::seedStartPosition(level, index + 1);
+            endPosition = bucket * TreeStorage::totalSize() + TreeStorage::seedStartPosition(level, index + 1);
         } else {
-            endPosition = SplittingTreeStorage<n, overhead>::seedStartPosition(level + 1, 0);
+            endPosition = bucket * TreeStorage::totalSize() + TreeStorage::seedStartPosition(level + 1, 0);
         }
         seedWidth = endPosition - startPosition;
         seedMask = ((1ul << seedWidth) - 1);
@@ -102,13 +106,22 @@ struct SplittingTaskIterator {
         if (index == tasksThisLevel) {
             index = 0;
             level++;
+            if (level == logn) {
+                level = 0;
+                bucket++;
+            }
         }
         updateProperties();
     }
 
     void previous() {
         if (index == 0) {
-            level--;
+            if (level == 0) {
+                level = logn - 1;
+                bucket--;
+            } else {
+                level--;
+            }
             index = n / (1ul << (logn - level)) - 1;
         } else {
             index--;
@@ -117,11 +130,11 @@ struct SplittingTaskIterator {
     }
 
     bool isEnd() {
-        return level >= logn;
+        return bucket >= nbuckets;
     }
 
     bool isFirst() {
-        return level + index == 0;
+        return level + index + bucket == 0;
     }
 
     void setLevel(size_t level_) {

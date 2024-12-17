@@ -12,16 +12,10 @@
 
 size_t numObjects = 1e6;
 size_t numQueries = 1e6;
-double spaceOverhead = 0.1;
+double spaceOverhead = 0.01;
 
 template <size_t n, double overhead>
 void construct() {
-    if (n != numObjects) {
-        throw std::logic_error("Wrong input size");
-    } else if (overhead != spaceOverhead) {
-        throw std::logic_error("Wrong input size");
-    }
-
     auto time = std::chrono::system_clock::now();
     long seed = std::chrono::duration_cast<std::chrono::milliseconds>(time.time_since_epoch()).count();
     bytehamster::util::XorShift64 prng(seed);
@@ -89,40 +83,23 @@ void construct() {
               << std::endl;
 }
 
-template <size_t I>
-void dispatchInputSize(size_t param) {
-    if constexpr (I <= 1) {
-        std::cerr << "The parameter " << param << " for the input size was not compiled into this binary." << std::endl;
-    } else if (I == param) {
-        construct<I, 0.01>();
+template <size_t k, double overhead>
+void dispatchBucketSize(size_t param) {
+    if constexpr (k <= 4) {
+        std::cerr << "The parameter " << param << " for k was not compiled into this binary." << std::endl;
+    } else if (k == param) {
+        construct<k, overhead>();
     } else {
-        dispatchInputSize<I / 2>(param);
+        dispatchBucketSize<k / 2, overhead>(param);
     }
 }
 
 int main(int argc, const char* const* argv) {
-    constexpr size_t k = 10000;
-    bytehamster::util::XorShift64 prng(42);
-    std::vector<uint64_t> keys;
-    for (size_t i = 0; i < 1000000; i++) {
-        keys.push_back(prng());
-    }
-    consensus::BumpedKPerfectHashFunction<k> bkphf(keys);
-    std::vector<size_t> buckets(keys.size() / k);
-    for (size_t i = 0; i < keys.size(); i++) {
-        size_t bucket = bkphf(keys.at(i));
-        buckets.at(bucket)++;
-        assert(buckets.at(bucket) <= k);
-    }
-    std::cout<<1.0f*bkphf.getBits()/keys.size()<<std::endl;
-    bkphf.printBits();
-    return 0;
-
-
-
+    size_t bucketSize = 8192;
 
     tlx::CmdlineParser cmd;
     cmd.add_bytes('n', "numObjects", numObjects, "Number of objects to construct with");
+    cmd.add_bytes('k', "bucketSize", bucketSize, "Bucket size of the initial partitioning");
     cmd.add_bytes('q', "numQueries", numQueries, "Number of queries to measure");
     cmd.add_double('e', "overhead", spaceOverhead, "Overhead parameter");
 
@@ -130,6 +107,20 @@ int main(int argc, const char* const* argv) {
         return 1;
     }
 
-    dispatchInputSize<1ul << 20>(numObjects);
+    if (spaceOverhead == 0.5) {
+        dispatchBucketSize<1ul << 15, 0.5>(bucketSize);
+    } else if (spaceOverhead == 0.3) {
+        dispatchBucketSize<1ul << 15, 0.3>(bucketSize);
+    } else if (spaceOverhead == 0.1) {
+        dispatchBucketSize<1ul << 15, 0.1>(bucketSize);
+    } else if (spaceOverhead == 0.03) {
+        dispatchBucketSize<1ul << 15, 0.03>(bucketSize);
+    } else if (spaceOverhead == 0.01) {
+        dispatchBucketSize<1ul << 15, 0.01>(bucketSize);
+    } else if (spaceOverhead == 0.001) {
+        dispatchBucketSize<1ul << 15, 0.001>(bucketSize);
+    } else {
+        std::cerr << "The parameter " << spaceOverhead << " for spaceOverhead was not compiled into this binary." << std::endl;
+    }
     return 0;
 }

@@ -17,6 +17,7 @@ namespace consensus {
 
 /**
  * Perfect hash function using the consensus idea: Combined search and encoding of successful seeds.
+ * <code>n</code> is the size of each RecSplit base case and must be a power of 2.
  */
 template <size_t n, double overhead>
 class ConsensusRecSplit {
@@ -25,15 +26,32 @@ class ConsensusRecSplit {
         static_assert(overhead > 0);
         static constexpr size_t ROOT_SEED_BITS = 64;
         static constexpr size_t logn = intLog2(n);
+        size_t numKeys = 0;
         UnalignedBitVector unalignedBitVector;
+        BumpedKPerfectHashFunction<n> *bucketingPhf = nullptr;
 
         explicit ConsensusRecSplit(std::span<const uint64_t> keys)
-                : unalignedBitVector(ROOT_SEED_BITS + SplittingTreeStorage<n, overhead>::totalSize()) {
-            if (keys.size() != n) {
-                throw std::logic_error("Wrong input size");
+                : numKeys(keys.size()),
+                  unalignedBitVector(ROOT_SEED_BITS + (numKeys / n) * SplittingTreeStorage<n, overhead>::totalSize()) {
+            std::cout << "Tree space per bucket: " << SplittingTreeStorage<n, overhead>::totalSize() << std::endl;
+
+            bucketingPhf = new BumpedKPerfectHashFunction<n>(keys);
+            size_t nbuckets = keys.size() / n;
+            std::vector<size_t> counters(nbuckets);
+            std::vector<uint64_t> modifiableKeys(keys.size());
+            for (uint64_t key : keys) {
+                size_t bucket = bucketingPhf->operator()(key);
+                if (bucket >= nbuckets) {
+                    continue; // No need to handle this key
+                }
+                modifiableKeys.at(bucket * n + counters.at(bucket)) = key;
+                counters.at(bucket)++;
             }
-            std::cout << "Tree space: " << SplittingTreeStorage<n, overhead>::totalSize() << std::endl;
-            std::vector<uint64_t> modifiableKeys(keys.begin(), keys.end());
+            #ifndef NDEBUG
+                for (size_t counter : counters) {
+                    assert(counter == n);
+                }
+            #endif
 
             for (size_t rootSeed = 0; rootSeed < (1ul << (ROOT_SEED_BITS - 1)); rootSeed++) {
                 unalignedBitVector.writeTo(ROOT_SEED_BITS, rootSeed);
@@ -44,8 +62,12 @@ class ConsensusRecSplit {
             throw std::logic_error("Unable to construct");
         }
 
+        ~ConsensusRecSplit() {
+            delete bucketingPhf;
+        }
+
         [[nodiscard]] size_t getBits() const {
-            return unalignedBitVector.bitSize();
+            return unalignedBitVector.bitSize() + bucketingPhf->getBits();
         }
 
         [[nodiscard]] size_t operator()(const std::string &key) const {
@@ -53,7 +75,12 @@ class ConsensusRecSplit {
         }
 
         [[nodiscard]] size_t operator()(uint64_t key) const {
-            SplittingTaskIterator<n, overhead> task(0, 0);
+            size_t nbuckets = numKeys / n;
+            size_t bucket = bucketingPhf->operator()(key);
+            if (bucket >= nbuckets) {
+                return bucket; // Fallback if numKeys does not divide n
+            }
+            SplittingTaskIterator<n, overhead> task(0, 0, bucket, numKeys / n);
             for (size_t level = 0; level < logn; level++) {
                 task.setLevel(level);
                 if (toLeft(key, readSeed(task))) {
@@ -62,15 +89,16 @@ class ConsensusRecSplit {
                     task.index = 2 * task.index + 1;
                 }
             }
-            return task.index;
+            return bucket * n + task.index;
         }
 
     private:
         bool construct(std::span<uint64_t> keys) {
-            SplittingTaskIterator<n, overhead> task(0, 0);
+            SplittingTaskIterator<n, overhead> task(0, 0, 0, numKeys / n);
             uint64_t seed = readSeed(task);
             while (true) { // Basically "while (!task.isEnd())"
-                std::span<uint64_t> keysThisTask = keys.subspan(task.index * task.taskSizeThisLevel, task.taskSizeThisLevel);
+                size_t keysBegin = task.bucket * n + task.index * task.taskSizeThisLevel;
+                std::span<uint64_t> keysThisTask = keys.subspan(keysBegin, task.taskSizeThisLevel);
                 bool success = false;
                 uint64_t maxSeed = seed | task.seedMask;
                 for (; seed <= maxSeed; seed++) {
