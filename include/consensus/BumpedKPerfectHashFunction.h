@@ -18,6 +18,7 @@ namespace consensus {
 template <size_t k>
 class BumpedKPerfectHashFunction {
         static constexpr double OVERLOAD_FACTOR = 0.97;
+        static constexpr size_t THRESHOLD_TRIMMING = 10; // Thresholds smaller than 1-1/t are not represented
         static constexpr size_t THRESHOLD_BITS = tlx::integer_log2_floor(k) - 1;
         static constexpr size_t THRESHOLD_RANGE = 1ul << THRESHOLD_BITS;
 
@@ -119,14 +120,14 @@ class BumpedKPerfectHashFunction {
 
         uint32_t compact_threshold(uint32_t threshold, size_t layer) const {
             size_t expected = expectedThresholds.at(layer);
-            size_t interpolationRange = expected / 10;
+            size_t interpolationRange = expected / THRESHOLD_TRIMMING;
             size_t minThreshold = expected - interpolationRange;
             assert(minThreshold > 0);
             // Threshold 0 is reserved as a safeguard for bumping all
             if (threshold < minThreshold) {
                 return 1;
             }
-            return std::min(THRESHOLD_RANGE, 1 + (THRESHOLD_RANGE - 1) * (threshold - minThreshold) / interpolationRange);
+            return std::min(THRESHOLD_RANGE - 1, 1 + (THRESHOLD_RANGE - 1) * (threshold - minThreshold) / interpolationRange);
         }
 
         void flushBucket(size_t layer, size_t bucketStart, size_t i, size_t bucketIdx,
