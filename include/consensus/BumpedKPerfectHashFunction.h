@@ -10,41 +10,22 @@
 #include <bytehamster/util/IntVector.h>
 
 namespace consensus {
-
-template <size_t THRESHOLD_RANGE, size_t k>
-constexpr std::array<uint32_t, THRESHOLD_RANGE> _fill_mapping() {
-    std::array<uint32_t, THRESHOLD_RANGE> array;
-    if (THRESHOLD_RANGE == 1) {
-        return array;
-    } else if (THRESHOLD_RANGE == 2) {
-        array.at(0) = 0;
-        array.at(1) = std::numeric_limits<uint32_t>::max();
-        return array;
-    }
-    array.at(0) = 0; // Last resort
-    array.at(1) = std::numeric_limits<uint32_t>::max() / 3; // Safeguard, so much bumping should never happen in practice
-    size_t interpolationRangeSteps = THRESHOLD_RANGE - 3;
-    size_t interpolationRange = std::numeric_limits<uint32_t>::max() / 10;
-    size_t interpolationRangeStart = std::numeric_limits<uint32_t>::max() - interpolationRange;
-    size_t interpolationRangeStep = interpolationRange / interpolationRangeSteps;
-    for (size_t i = 0; i < interpolationRangeSteps; i++) {
-        array.at(2 + i) = interpolationRangeStart + i * interpolationRangeStep;
-    }
-    array.at(THRESHOLD_RANGE - 1) = std::numeric_limits<uint32_t>::max(); // Keep all
-    return array;
-}
-
+/**
+ * If the number of input keys is not a multiple of k,
+ * this generates a minimal 1-perfect hash function on the remaining keys.
+ * This is useful for Consensus, but might need an unexpectedly high amount of space for other uses.
+ */
 template <size_t k>
 class BumpedKPerfectHashFunction {
         static constexpr double OVERLOAD_FACTOR = 0.97;
         static constexpr size_t THRESHOLD_BITS = tlx::integer_log2_floor(k) - 1;
         static constexpr size_t THRESHOLD_RANGE = 1ul << THRESHOLD_BITS;
-        static constexpr std::array<uint32_t, THRESHOLD_RANGE> THRESHOLD_MAPPING = _fill_mapping<THRESHOLD_RANGE, k>();
 
         size_t N;
         size_t nbuckets;
         bytehamster::util::IntVector<THRESHOLD_BITS> thresholds;
         std::vector<size_t> layerBases;
+        std::vector<uint32_t> expectedThresholds;
         std::unordered_map<uint64_t, size_t> fallbackPhf;
         pasta::BitVector freePositionsBv;
         pasta::FlatRankSelect<pasta::OptimizedFor::ONE_QUERIES> *freePositionsRankSelect = nullptr;
@@ -88,6 +69,8 @@ class BumpedKPerfectHashFunction {
                         hash.threshold = hash.mhc >> 32;
                     }
                 }
+                double scaling = std::min(1.0, (double(bucketsThisLayer * k) / hashes.size()) / OVERLOAD_FACTOR);
+                expectedThresholds.push_back(std::numeric_limits<uint32_t>::max() * scaling);
                 layerBases.push_back(layerBase + bucketsThisLayer);
                 ips2ra::sort(hashes.begin(), hashes.end(), [] (const KeyInfo &t) { return uint64_t(t.bucket) << 32 | t.threshold; });
                 std::vector<KeyInfo> bumpedKeys;
@@ -96,14 +79,14 @@ class BumpedKPerfectHashFunction {
                 for (size_t i = 0; i < hashes.size(); i++) {
                     size_t bucket = hashes.at(i).bucket;
                     while (bucket != previousBucket) {
-                        flushBucket(layerBase, bucketStart, i, previousBucket, hashes, bumpedKeys, freePositions);
+                        flushBucket(layer, bucketStart, i, previousBucket, hashes, bumpedKeys, freePositions);
                         previousBucket++;
                         bucketStart = i;
                     }
                 }
                 // Last bucket
                 while (previousBucket < bucketsThisLayer) {
-                    flushBucket(layerBase, bucketStart, hashes.size(), previousBucket, hashes, bumpedKeys, freePositions);
+                    flushBucket(layer, bucketStart, hashes.size(), previousBucket, hashes, bumpedKeys, freePositions);
                     previousBucket++;
                     bucketStart = hashes.size();
                 }
@@ -134,20 +117,23 @@ class BumpedKPerfectHashFunction {
             }
         }
 
-        uint32_t compact_threshold(uint32_t threshold) const {
+        uint32_t compact_threshold(uint32_t threshold, size_t layer) const {
+            size_t expected = expectedThresholds.at(layer);
+            size_t interpolationRange = expected / 10;
+            size_t minThreshold = expected - interpolationRange;
+            assert(minThreshold > 0);
             // Threshold 0 is reserved as a safeguard for bumping all
-            constexpr size_t interpolationRange = std::numeric_limits<uint32_t>::max() / 10;
-            constexpr size_t minThreshold = std::numeric_limits<uint32_t>::max() - interpolationRange;
             if (threshold < minThreshold) {
                 return 1;
             }
-            return 1 + (THRESHOLD_RANGE - 1) * (threshold - minThreshold) / interpolationRange;
+            return std::min(THRESHOLD_RANGE, 1 + (THRESHOLD_RANGE - 1) * (threshold - minThreshold) / interpolationRange);
         }
 
-        void flushBucket(size_t layerBase, size_t bucketStart, size_t i, size_t bucketIdx,
+        void flushBucket(size_t layer, size_t bucketStart, size_t i, size_t bucketIdx,
                          std::vector<KeyInfo> &hashes, std::vector<KeyInfo> &bumpedKeys,
                          std::vector<size_t> &freePositions) {
             size_t bucketSize = i - bucketStart;
+            size_t layerBase = layerBases.at(layer);
             if (bucketSize <= k) {
                 size_t threshold = THRESHOLD_RANGE - 1;
                 thresholds.set(layerBase + bucketIdx, threshold);
@@ -155,8 +141,8 @@ class BumpedKPerfectHashFunction {
                     freePositions.push_back(layerBase + bucketIdx);
                 }
             } else {
-                size_t lastThreshold = compact_threshold(hashes.at(bucketStart + k - 1).threshold);
-                size_t firstBumpedThreshold = compact_threshold(hashes.at(bucketStart + k).threshold);
+                size_t lastThreshold = compact_threshold(hashes.at(bucketStart + k - 1).threshold, layer);
+                size_t firstBumpedThreshold = compact_threshold(hashes.at(bucketStart + k).threshold, layer);
                 size_t threshold = lastThreshold;
                 if (firstBumpedThreshold == lastThreshold) {
                     // Needs to bump more
@@ -164,7 +150,7 @@ class BumpedKPerfectHashFunction {
                 }
                 thresholds.set(layerBase + bucketIdx, threshold);
                 for (size_t l = 0; l < bucketSize; l++) {
-                    if (compact_threshold(hashes.at(bucketStart + l).threshold) > threshold) {
+                    if (compact_threshold(hashes.at(bucketStart + l).threshold, layer) > threshold) {
                         bumpedKeys.push_back(hashes.at(bucketStart + l));
                         if (l < k) {
                             freePositions.push_back(layerBase + bucketIdx);
@@ -178,6 +164,7 @@ class BumpedKPerfectHashFunction {
         [[nodiscard]] size_t getBits() const {
             return 8 * sizeof(*this)
                    + fallbackPhf.size() * 4
+                   + expectedThresholds.size() * sizeof(uint32_t) * 8
                    + freePositionsBv.size()
                    + ((freePositionsRankSelect == nullptr) ? 0 : 8 * freePositionsRankSelect->space_usage())
                    + 8 * thresholds.dataSizeBytes();
@@ -189,6 +176,7 @@ class BumpedKPerfectHashFunction {
             std::cout << "PHF: " << 1.0f*fallbackPhf.size() * 4 / N << std::endl;
             if (freePositionsBv.size() > 0) {
                 std::cout << "Fano: " << 1.0f*(freePositionsBv.size() + 8 * freePositionsRankSelect->space_usage()) / N << std::endl;
+                std::cout << "Fano size: " << freePositionsBv.size() << std::endl;
             }
         }
 
@@ -206,7 +194,7 @@ class BumpedKPerfectHashFunction {
                 uint32_t bucket = ::bytehamster::util::fastrange32(mhc & 0xffffffff, layerSize);
                 uint32_t threshold = mhc >> 32;
                 uint64_t storedThreshold = thresholds.at(base + bucket);
-                if (compact_threshold(threshold) <= storedThreshold) {
+                if (compact_threshold(threshold, layer) <= storedThreshold) {
                     return base + bucket;
                 }
             }
