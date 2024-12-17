@@ -30,36 +30,21 @@ class ConsensusRecSplit {
         UnalignedBitVector unalignedBitVector;
         BumpedKPerfectHashFunction<n> *bucketingPhf = nullptr;
 
+        explicit ConsensusRecSplit(std::span<const std::string> keys)
+                : numKeys(keys.size()),
+                  unalignedBitVector(ROOT_SEED_BITS + (numKeys / n) * SplittingTreeStorage<n, overhead>::totalSize()) {
+            std::vector<uint64_t> hashedKeys;
+            hashedKeys.reserve(keys.size());
+            for (const std::string &key : keys) {
+                hashedKeys.push_back(bytehamster::util::MurmurHash64(key));
+            }
+            startSearch(hashedKeys);
+        }
+
         explicit ConsensusRecSplit(std::span<const uint64_t> keys)
                 : numKeys(keys.size()),
                   unalignedBitVector(ROOT_SEED_BITS + (numKeys / n) * SplittingTreeStorage<n, overhead>::totalSize()) {
-            std::cout << "Tree space per bucket: " << SplittingTreeStorage<n, overhead>::totalSize() << std::endl;
-
-            bucketingPhf = new BumpedKPerfectHashFunction<n>(keys);
-            size_t nbuckets = keys.size() / n;
-            std::vector<size_t> counters(nbuckets);
-            std::vector<uint64_t> modifiableKeys(keys.size());
-            for (uint64_t key : keys) {
-                size_t bucket = bucketingPhf->operator()(key);
-                if (bucket >= nbuckets) {
-                    continue; // No need to handle this key
-                }
-                modifiableKeys.at(bucket * n + counters.at(bucket)) = key;
-                counters.at(bucket)++;
-            }
-            #ifndef NDEBUG
-                for (size_t counter : counters) {
-                    assert(counter == n);
-                }
-            #endif
-
-            for (size_t rootSeed = 0; rootSeed < (1ul << (ROOT_SEED_BITS - 1)); rootSeed++) {
-                unalignedBitVector.writeTo(ROOT_SEED_BITS, rootSeed);
-                if (construct(modifiableKeys)) {
-                    return;
-                }
-            }
-            throw std::logic_error("Unable to construct");
+            startSearch(keys);
         }
 
         ~ConsensusRecSplit() {
@@ -93,6 +78,36 @@ class ConsensusRecSplit {
         }
 
     private:
+        void startSearch(std::span<const uint64_t> keys) {
+            std::cout << "Tree space per bucket: " << SplittingTreeStorage<n, overhead>::totalSize() << std::endl;
+
+            bucketingPhf = new BumpedKPerfectHashFunction<n>(keys);
+            size_t nbuckets = keys.size() / n;
+            std::vector<size_t> counters(nbuckets);
+            std::vector<uint64_t> modifiableKeys(keys.size());
+            for (uint64_t key : keys) {
+                size_t bucket = bucketingPhf->operator()(key);
+                if (bucket >= nbuckets) {
+                    continue; // No need to handle this key
+                }
+                modifiableKeys.at(bucket * n + counters.at(bucket)) = key;
+                counters.at(bucket)++;
+            }
+            #ifndef NDEBUG
+                for (size_t counter : counters) {
+                    assert(counter == n);
+                }
+            #endif
+
+            for (size_t rootSeed = 0; rootSeed < (1ul << (ROOT_SEED_BITS - 1)); rootSeed++) {
+                unalignedBitVector.writeTo(ROOT_SEED_BITS, rootSeed);
+                if (construct(modifiableKeys)) {
+                    return;
+                }
+            }
+            throw std::logic_error("Unable to construct");
+        }
+
         bool construct(std::span<uint64_t> keys) {
             SplittingTaskIterator<n, overhead> task(0, 0, 0, numKeys / n);
             uint64_t seed = readSeed(task);
