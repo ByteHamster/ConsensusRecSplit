@@ -32,12 +32,16 @@ if(NOT TARGET ByteHamster::Util)
     add_subdirectory(extlib/util)
 endif()
 
+if(NOT TARGET FiPS::fips)
+    add_subdirectory(extlib/fips)
+endif()
+
 # ---------------------------- Library Setup ----------------------------
 
 add_library(ConsensusRecSplit INTERFACE)
 target_include_directories(ConsensusRecSplit INTERFACE include)
 target_compile_features(ConsensusRecSplit INTERFACE cxx_std_20)
-target_link_libraries(ConsensusRecSplit INTERFACE ips2ra ByteHamster::Util)
+target_link_libraries(ConsensusRecSplit INTERFACE ips2ra ByteHamster::Util FiPS::fips)
 add_library(ConsensusRecSplit::consensusrecsplit ALIAS ConsensusRecSplit)
 
 # ---------------------------- Benchmarks ----------------------------

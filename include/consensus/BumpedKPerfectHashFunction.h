@@ -8,6 +8,7 @@
 #include <tlx/math/integer_log2.hpp>
 #include <bytehamster/util/Function.h>
 #include <bytehamster/util/IntVector.h>
+#include <Fips.h>
 
 namespace consensus {
 /**
@@ -36,7 +37,8 @@ class BumpedKPerfectHashFunction {
         size_t N;
         bytehamster::util::IntVector<THRESHOLD_BITS> thresholds;
         std::vector<LayerInfo> layerInfo;
-        std::unordered_map<uint64_t, size_t> fallbackPhf;
+        using fallback_phf_t = fips::FiPS<512, uint32_t, false>;
+        fallback_phf_t fallbackPhf;
         pasta::BitVector freePositionsBv;
         pasta::FlatRankSelect<pasta::OptimizedFor::ONE_QUERIES> *freePositionsRankSelect = nullptr;
     public:
@@ -98,9 +100,12 @@ class BumpedKPerfectHashFunction {
                 //std::cout<<"Bumped in layer "<<layer<<": "<<hashes.size()<<std::endl;
             }
 
+            std::vector<uint64_t> fallbackHashes;
+            fallbackHashes.reserve(hashes.size());
             for (size_t i = 0; i < hashes.size(); i++) {
-                fallbackPhf.insert(std::make_pair(hashes.at(i).mhc, i));
+                fallbackHashes.push_back(hashes.at(i).mhc);
             }
+            fallbackPhf = fallback_phf_t(fallbackHashes, 1.0);
             size_t additionalFreePositions = hashes.size() - freePositions.size();
             size_t nbucketsHandled = layerInfo.back().base;
             {
@@ -167,7 +172,7 @@ class BumpedKPerfectHashFunction {
         /** Estimate for the space usage of this structure, in bits */
         [[nodiscard]] size_t getBits() const {
             return 8 * sizeof(*this)
-                   + fallbackPhf.size() * 4
+                   + fallbackPhf.getBits()
                    + layerInfo.size() * sizeof(LayerInfo) * 8
                    + freePositionsBv.space_usage() - 8 * sizeof(freePositionsBv) // Already in sizeof(*this)
                    + ((freePositionsRankSelect == nullptr) ? 0 : 8 * freePositionsRankSelect->space_usage())
@@ -178,8 +183,9 @@ class BumpedKPerfectHashFunction {
             std::cout << "Overall: " << 1.0f*getBits()/N << std::endl;
             std::cout << "This: " << 8.0f*sizeof(*this)/N << std::endl;
             std::cout << "Thresholds: " << 1.0f*THRESHOLD_BITS/k << std::endl;
-            std::cout << "Fallback PHF keys: " << fallbackPhf.size() << std::endl;
-            std::cout << "PHF: " << 1.0f*fallbackPhf.size() * 4 / N << std::endl;
+            std::cout << "Fallback PHF keys: " << fallbackPhf.getN() << std::endl;
+            std::cout << "PHF internal: " << 1.0f*fallbackPhf.getBits() / fallbackPhf.getN() << std::endl;
+            std::cout << "PHF: " << 1.0f*fallbackPhf.getBits() / N << std::endl;
             if (freePositionsBv.size() > 0) {
                 std::cout << "Fano: " << 1.0f*(freePositionsBv.space_usage() + 8 * freePositionsRankSelect->space_usage()) / N << std::endl;
                 std::cout << "Fano size: " << freePositionsBv.size() << std::endl;
@@ -204,7 +210,7 @@ class BumpedKPerfectHashFunction {
                     return base + bucket;
                 }
             }
-            size_t phf = fallbackPhf.at(mhc);
+            size_t phf = fallbackPhf(mhc);
             size_t bucket = freePositionsRankSelect->select1(phf + 1) - phf;
             size_t nbuckets = layerInfo.back().base;
             if (bucket >= nbuckets) { // Last half-filled bucket

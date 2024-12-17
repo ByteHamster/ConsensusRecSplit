@@ -7,3 +7,6 @@
 [submodule "extlib/ips2ra"]
 	path = extlib/ips2ra
 	url = https://github.com/ips4o/ips2ra.git
+[submodule "extlib/fips"]
+	path = extlib/fips
+	url = https://github.com/ByteHamster/FiPS.git
