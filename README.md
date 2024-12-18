@@ -9,6 +9,18 @@ Perfect hash functions have applications in databases, bioinformatics, and as a 
 ConsensusRecSplit is a perfect hash function with very small space consumption.
 It is based on *Combined Search and Encoding of Successful Seeds* (Consensus), applied to
 the recursive splitting idea of [RecSplit](https://github.com/vigna/sux/blob/master/sux/function/RecSplit.hpp).
+Compared to previous approaches, ConsensusRecSplit achieves a space consumption that is orders of magnitude closer to the lower bound.
+On 100 million keys and about an hour of construction time, it achieves a stunning 1.4451 bits per key, while the lower bound is 1.4427 bits per key.
+RecSplit achieves 1.6127 bits per key in the same construction time.
+
+The recursive splitting idea works best for input sizes that are powers of two, and our implementation only supports powers of two.
+While Consensus does have polynomial running time, the first splittings touch a large number of keys, hurting cache locality.
+This is why we combine it with a simple [threshold-based k-perfect hash function](https://arxiv.org/abs/2310.14959).
+We then perform combined search and encoding on the splitting seeds, while also combining the k-perfect buckets with one another.
+The k-perfect hash function itself currently does not use Consensus, even though it should in the future to improve space efficiency.
+In general, that part is not as optimized as the splitting idea, and has considerably larger overheads than the Consensus base case.
+The bucket size (k) gives a trade-off between query performance, construction performance, and space consumption.
+Rather large k such as 32768 work best in our experiments.
 
 ### Library usage
 
