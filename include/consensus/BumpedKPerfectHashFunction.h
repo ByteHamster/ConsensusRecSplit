@@ -109,7 +109,7 @@ class BumpedKPerfectHashFunction {
             std::vector<uint64_t> fallbackHashes;
             fallbackHashes.reserve(hashes.size());
             for (size_t i = 0; i < hashes.size(); i++) {
-                fallbackHashes.push_back(hashes.at(i).mhc);
+                fallbackHashes.push_back(bytehamster::util::MurmurHash64(hashes.at(i).mhc));
             }
             fallbackPhf = fallback_phf_t(fallbackHashes, 1.0);
             size_t additionalFreePositions = hashes.size() - freePositions.size();
@@ -216,7 +216,7 @@ class BumpedKPerfectHashFunction {
                     return base + bucket;
                 }
             }
-            size_t phf = fallbackPhf(mhc);
+            size_t phf = fallbackPhf(bytehamster::util::MurmurHash64(mhc));
             size_t bucket = freePositionsRankSelect->select1(phf + 1) - phf;
             size_t nbuckets = layerInfo.back().base;
             if (bucket >= nbuckets) { // Last half-filled bucket
