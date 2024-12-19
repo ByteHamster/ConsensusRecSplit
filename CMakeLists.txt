@@ -55,4 +55,7 @@ if(PROJECT_IS_TOP_LEVEL)
 
     add_executable(Benchmark benchmark/benchmark_construction.cpp)
     target_link_libraries(Benchmark PUBLIC BenchmarkUtils ConsensusRecSplit)
+
+    add_executable(BenchmarkKPerfect benchmark/benchmark_kperfect.cpp)
+    target_link_libraries(BenchmarkKPerfect PUBLIC BenchmarkUtils ConsensusRecSplit)
 endif()
