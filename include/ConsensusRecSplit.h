@@ -123,8 +123,10 @@ class ConsensusRecSplit {
                     }
                 }
                 if (success) {
-                    std::partition(keysThisTask.begin(), keysThisTask.end(),
-                                   [&](uint64_t key) { return toLeft(key, seed); });
+                    if (task.taskSizeThisLevel > 2) { // No need to partition last layer
+                        std::partition(keysThisTask.begin(), keysThisTask.end(),
+                                       [&](uint64_t key) { return toLeft(key, seed); });
+                    }
                     writeSeed(task, seed);
                     task.next();
                     if (task.isEnd()) {
