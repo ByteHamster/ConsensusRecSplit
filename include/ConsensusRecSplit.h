@@ -25,7 +25,7 @@ class ConsensusRecSplit {
         static_assert(1ul << intLog2(k) == k, "k must be a power of 2");
         static_assert(overhead > 0);
         static constexpr size_t ROOT_SEED_BITS = 64;
-        static constexpr size_t logn = intLog2(k);
+        static constexpr size_t logk = intLog2(k);
         size_t numKeys = 0;
         UnalignedBitVector unalignedBitVector;
         BumpedKPerfectHashFunction<k> *bucketingPhf = nullptr;
@@ -66,7 +66,7 @@ class ConsensusRecSplit {
                 return bucket; // Fallback if numKeys does not divide n
             }
             SplittingTaskIterator<k, overhead> task(0, 0, bucket, numKeys / k);
-            for (size_t level = 0; level < logn; level++) {
+            for (size_t level = 0; level < logk; level++) {
                 task.setLevel(level);
                 if (toLeft(key, readSeed(task))) {
                     task.index = 2 * task.index;
@@ -84,7 +84,7 @@ class ConsensusRecSplit {
             bucketingPhf = new BumpedKPerfectHashFunction<k>(keys);
             size_t nbuckets = keys.size() / k;
             std::vector<size_t> counters(nbuckets);
-            std::vector<uint64_t> modifiableKeys(keys.size());
+            std::vector<uint64_t> modifiableKeys(nbuckets * k); // Note that this is possibly fewer than n
             for (uint64_t key : keys) {
                 size_t bucket = bucketingPhf->operator()(key);
                 if (bucket >= nbuckets) {
