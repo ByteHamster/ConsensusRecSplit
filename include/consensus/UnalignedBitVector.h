@@ -11,7 +11,15 @@ namespace consensus {
 class UnalignedBitVector {
         std::vector<uint64_t> bits;
     public:
+        explicit UnalignedBitVector() : bits(0) {
+        }
+
         explicit UnalignedBitVector(size_t size) : bits((size + 63) / 64) {
+        }
+
+        void clearAndResize(size_t size) {
+            bits.clear();
+            bits.resize((size + 63) / 64);
         }
 
         /**
@@ -21,6 +29,7 @@ class UnalignedBitVector {
          */
         [[nodiscard]] uint64_t readAt(size_t bitPosition) const {
             assert(bitPosition >= 64);
+            assert(bitPosition / 64 <= bits.size());
             if (bitPosition % 64 == 0) {
                 return bits[(bitPosition / 64) - 1];
             } else {
@@ -35,6 +44,7 @@ class UnalignedBitVector {
          */
         void writeTo(size_t bitPosition, uint64_t value) {
             assert(bitPosition >= 64);
+            assert(bitPosition / 64 <= bits.size());
             if (bitPosition % 64 == 0) {
                 bits[(bitPosition / 64) - 1] = value;
             } else {

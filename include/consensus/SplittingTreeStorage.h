@@ -54,6 +54,10 @@ class SplittingTreeStorage {
         static constexpr std::array<size_t, logn + 1> microBitsLevelSize = fillMicroBitsLevelSize();
 
     public:
+        static size_t seedStartPositionLevelwise(size_t level, size_t index) {
+            return (microBitsForSplitOnLevel[level] * index) / (1024 * 1024);
+        }
+
         static size_t seedStartPosition(size_t level, size_t index) {
             return (microBitsLevelSize[level] + microBitsForSplitOnLevel[level] * index) / (1024 * 1024);
         }
