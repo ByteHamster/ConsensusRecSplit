@@ -14,7 +14,7 @@ size_t numObjects = 1e6;
 size_t numQueries = 1e6;
 double spaceOverhead = 0.01;
 
-template <size_t n, double overhead>
+template <size_t k, double overhead>
 void construct() {
     auto time = std::chrono::system_clock::now();
     long seed = std::chrono::duration_cast<std::chrono::milliseconds>(time.time_since_epoch()).count();
@@ -33,7 +33,7 @@ void construct() {
     std::cout<<"Constructing"<<std::endl;
     sleep(1);
     auto beginConstruction = std::chrono::high_resolution_clock::now();
-    consensus::ConsensusRecSplit<n, overhead> hashFunc(keys);
+    consensus::ConsensusRecSplit<k, overhead> hashFunc(keys);
     unsigned long constructionDurationMs = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::high_resolution_clock::now() - beginConstruction).count();
 
@@ -75,6 +75,7 @@ void construct() {
     std::cout << "RESULT"
               << " method=Consensus"
               << " overhead=" << overhead
+              << " k=" << k
               << " N=" << numObjects
               << " numQueries=" << numQueries
               << " queryTimeMilliseconds=" << queryDurationMs
