@@ -162,7 +162,8 @@ struct SplittingTaskIteratorLevelwise {
 
     explicit SplittingTaskIteratorLevelwise(size_t currentTask, UnalignedBitVector &unalignedBitVector)
             : idx(currentTask), unalignedBitVector(unalignedBitVector) {
-        recalculate();
+        recalculatePositions();
+        readSeed();
     }
 
     void recalculatePositions() {
@@ -173,8 +174,7 @@ struct SplittingTaskIteratorLevelwise {
         fromKey = idx * taskSize;
     }
 
-    void recalculate() {
-        recalculatePositions();
+    void readSeed() {
         seed = unalignedBitVector.readAt(seedEndPos + ROOT_SEED_BITS);
         maxSeed = seed | seedMask;
     }
@@ -188,7 +188,8 @@ struct SplittingTaskIteratorLevelwise {
 
     void prev() {
         idx--;
-        recalculate();
+        recalculatePositions();
+        readSeed();
     }
 
     void writeSeed() {

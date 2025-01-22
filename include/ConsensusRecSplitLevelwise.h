@@ -150,31 +150,27 @@ class ConsensusRecSplitLevelwise {
 
             SplittingTaskIteratorLevelwise<k, overhead, level, ROOT_SEED_BITS> task(0, unalignedBitVector);
             while (true) {
-                while (true) { // Test all seeds of this task
-                    if (isSeedSuccessful<taskSize>(keys, task.fromKey, task.seed + startSeed[level])) {
+                if (isSeedSuccessful<taskSize>(keys, task.fromKey, task.seed + startSeed[level])) {
+                    task.writeSeed();
+                    if (task.idx + 1 == numTasks) [[unlikely]] {
+                        return; // Success
+                    }
+                    task.next();
+                } else if (task.seed != task.maxSeed) {
+                    task.seed++;
+                } else { // Backtrack
+                    while (task.seed == task.maxSeed && !task.isFirst()) {
+                        task.prev();
+                    }
+                    if (task.isFirst() && task.seed == task.maxSeed) [[unlikely]] {
+                        // Clear task seed and increment root seed
+                        task.seed &= ~task.seedMask;
                         task.writeSeed();
-                        if (task.idx + 1 == numTasks) {
-                            return; // Success
-                        }
-                        task.next();
-                        break;
-                    } else if (task.seed != task.maxSeed) {
+                        uint64_t rootSeed = unalignedBitVector.readAt(ROOT_SEED_BITS);
+                        unalignedBitVector.writeTo(ROOT_SEED_BITS, rootSeed + 1);
+                        task.readSeed();
+                    } else {
                         task.seed++;
-                    } else { // Backtrack
-                        while (task.seed == task.maxSeed && !task.isFirst()) {
-                            task.prev();
-                        }
-                        if (task.isFirst() && task.seed == task.maxSeed) {
-                            // Clear task seed and increment root seed
-                            task.seed &= ~task.seedMask;
-                            task.writeSeed();
-                            uint64_t rootSeed = unalignedBitVector.readAt(ROOT_SEED_BITS);
-                            unalignedBitVector.writeTo(ROOT_SEED_BITS, rootSeed + 1);
-                            task.recalculate();
-                        } else {
-                            task.seed++;
-                        }
-                        break; // Next task
                     }
                 }
             }
