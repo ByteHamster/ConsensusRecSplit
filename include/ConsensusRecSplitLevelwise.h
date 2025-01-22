@@ -161,22 +161,22 @@ class ConsensusRecSplitLevelwise {
                     } else if (task.seed != task.maxSeed) {
                         task.seed++;
                     } else { // Backtrack
-                        while ((task.seed & task.seedMask) == task.seedMask) {
-                            task.seed &= ~task.seedMask;
-                            task.writeSeed();
-                            if (task.isFirst()) {
-                                uint64_t rootSeed = unalignedBitVector.readAt(ROOT_SEED_BITS);
-                                unalignedBitVector.writeTo(ROOT_SEED_BITS, rootSeed + 1);
-                                task.recalculate();
-                                break;
-                            }
+                        while (task.seed == task.maxSeed && !task.isFirst()) {
                             task.prev();
                         }
-                        task.seed++;
+                        if (task.isFirst() && task.seed == task.maxSeed) {
+                            // Clear task seed and increment root seed
+                            task.seed &= ~task.seedMask;
+                            task.writeSeed();
+                            uint64_t rootSeed = unalignedBitVector.readAt(ROOT_SEED_BITS);
+                            unalignedBitVector.writeTo(ROOT_SEED_BITS, rootSeed + 1);
+                            task.recalculate();
+                        } else {
+                            task.seed++;
+                        }
                         break; // Next task
                     }
                 }
-
             }
         }
 

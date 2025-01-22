@@ -148,13 +148,13 @@ struct SplittingTaskIterator {
 };
 
 template <size_t k, double overhead, size_t level, size_t ROOT_SEED_BITS>
-struct  SplittingTaskIteratorLevelwise {
+struct SplittingTaskIteratorLevelwise {
     static constexpr size_t logk = intLog2(k);
     static constexpr size_t taskSize = 1ul << (logk - level);
     size_t idx;
     UnalignedBitVector &unalignedBitVector;
-    size_t seedStartPos = 0;
     size_t seedEndPos = 0;
+    size_t seedWidth = 0;
     uint64_t seedMask = 0;
     uint64_t seed = 0;
     size_t fromKey = 0;
@@ -165,18 +165,25 @@ struct  SplittingTaskIteratorLevelwise {
         recalculate();
     }
 
-    void recalculate() {
-        seedStartPos = SplittingTreeStorage<k, overhead>::seedStartPositionLevelwise(level, idx);
+    void recalculatePositions() {
+        size_t seedStartPos = SplittingTreeStorage<k, overhead>::seedStartPositionLevelwise(level, idx);
         seedEndPos = SplittingTreeStorage<k, overhead>::seedStartPositionLevelwise(level, idx + 1);
-        seedMask = (1ul << (seedEndPos - seedStartPos)) - 1;
-        seed = unalignedBitVector.readAt(seedEndPos + ROOT_SEED_BITS);
+        seedWidth = seedEndPos - seedStartPos;
+        seedMask = (1ul << seedWidth) - 1;
         fromKey = idx * taskSize;
+    }
+
+    void recalculate() {
+        recalculatePositions();
+        seed = unalignedBitVector.readAt(seedEndPos + ROOT_SEED_BITS);
         maxSeed = seed | seedMask;
     }
 
     void next() {
         idx++;
-        recalculate();
+        recalculatePositions();
+        seed <<= seedWidth;
+        maxSeed = seed | seedMask;
     }
 
     void prev() {
