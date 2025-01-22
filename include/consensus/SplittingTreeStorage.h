@@ -147,4 +147,50 @@ struct SplittingTaskIterator {
     }
 };
 
+template <size_t k, double overhead, size_t level, size_t ROOT_SEED_BITS>
+struct  SplittingTaskIteratorLevelwise {
+    static constexpr size_t logk = intLog2(k);
+    static constexpr size_t taskSize = 1ul << (logk - level);
+    size_t idx;
+    UnalignedBitVector &unalignedBitVector;
+    size_t seedStartPos = 0;
+    size_t seedEndPos = 0;
+    uint64_t seedMask = 0;
+    uint64_t seed = 0;
+    size_t fromKey = 0;
+    uint64_t maxSeed = 0;
+
+    explicit SplittingTaskIteratorLevelwise(size_t currentTask, UnalignedBitVector &unalignedBitVector)
+            : idx(currentTask), unalignedBitVector(unalignedBitVector) {
+        recalculate();
+    }
+
+    void recalculate() {
+        seedStartPos = SplittingTreeStorage<k, overhead>::seedStartPositionLevelwise(level, idx);
+        seedEndPos = SplittingTreeStorage<k, overhead>::seedStartPositionLevelwise(level, idx + 1);
+        seedMask = (1ul << (seedEndPos - seedStartPos)) - 1;
+        seed = unalignedBitVector.readAt(seedEndPos + ROOT_SEED_BITS);
+        fromKey = idx * taskSize;
+        maxSeed = seed | seedMask;
+    }
+
+    void next() {
+        idx++;
+        recalculate();
+    }
+
+    void prev() {
+        idx--;
+        recalculate();
+    }
+
+    void writeSeed() {
+        unalignedBitVector.writeTo(seedEndPos + ROOT_SEED_BITS, seed);
+    }
+
+    bool isFirst() {
+        return idx == 0;
+    }
+};
+
 } // namespace consensus

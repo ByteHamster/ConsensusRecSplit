@@ -139,19 +139,6 @@ class ConsensusRecSplitLevelwise {
         }
 
         template <size_t level>
-        struct TaskInfo {
-            size_t seedStartPos;
-            size_t seedEndPos;
-            uint64_t seedMask;
-
-            explicit TaskInfo(size_t currentTask) {
-                seedStartPos = SplittingTreeStorage<k, overhead>::seedStartPositionLevelwise(level, currentTask);
-                seedEndPos = SplittingTreeStorage<k, overhead>::seedStartPositionLevelwise(level, currentTask + 1);
-                seedMask = (1ul << (seedEndPos - seedStartPos)) - 1;
-            }
-        };
-
-        template <size_t level>
         void findSeedsForLevel(const std::vector<uint64_t> &keys) {
             static_assert(level < logk);
             constexpr size_t taskSize = 1ul << (logk - level);
@@ -161,39 +148,31 @@ class ConsensusRecSplitLevelwise {
             UnalignedBitVector &unalignedBitVector = unalignedBitVectors.at(level);
             unalignedBitVector.clearAndResize(ROOT_SEED_BITS + bitsThisLevel);
 
-            size_t currentTask = 0;
+            SplittingTaskIteratorLevelwise<k, overhead, level, ROOT_SEED_BITS> task(0, unalignedBitVector);
             while (true) {
-                size_t fromKey = currentTask * taskSize;
-                TaskInfo<level> taskInfo(currentTask);
-                uint64_t taskSeed = unalignedBitVector.readAt(taskInfo.seedEndPos + ROOT_SEED_BITS);
-                uint64_t taskMaxSeed = taskSeed | taskInfo.seedMask;
-
                 while (true) { // Test all seeds of this task
-                    if (isSeedSuccessful<taskSize>(keys, fromKey, taskSeed + startSeed[level])) {
-                        unalignedBitVector.writeTo(taskInfo.seedEndPos + ROOT_SEED_BITS, taskSeed);
-                        currentTask++;
-                        if (currentTask == numTasks) {
+                    if (isSeedSuccessful<taskSize>(keys, task.fromKey, task.seed + startSeed[level])) {
+                        task.writeSeed();
+                        if (task.idx + 1 == numTasks) {
                             return; // Success
                         }
-                        break; // Next task
-                    } else if (taskSeed != taskMaxSeed) {
-                        taskSeed++;
+                        task.next();
+                        break;
+                    } else if (task.seed != task.maxSeed) {
+                        task.seed++;
                     } else { // Backtrack
-                        while ((taskSeed & taskInfo.seedMask) == taskInfo.seedMask) {
-                            taskSeed &= ~taskInfo.seedMask;
-                            unalignedBitVector.writeTo(taskInfo.seedEndPos + ROOT_SEED_BITS, taskSeed);
-                            if (currentTask == 0) {
+                        while ((task.seed & task.seedMask) == task.seedMask) {
+                            task.seed &= ~task.seedMask;
+                            task.writeSeed();
+                            if (task.isFirst()) {
                                 uint64_t rootSeed = unalignedBitVector.readAt(ROOT_SEED_BITS);
                                 unalignedBitVector.writeTo(ROOT_SEED_BITS, rootSeed + 1);
-                                taskSeed = unalignedBitVector.readAt(taskInfo.seedEndPos + ROOT_SEED_BITS);
+                                task.recalculate();
                                 break;
                             }
-                            currentTask--;
-                            taskInfo = TaskInfo<level>(currentTask);
-                            taskSeed = unalignedBitVector.readAt(taskInfo.seedEndPos + ROOT_SEED_BITS);
+                            task.prev();
                         }
-                        taskSeed++;
-                        unalignedBitVector.writeTo(taskInfo.seedEndPos + ROOT_SEED_BITS, taskSeed);
+                        task.seed++;
                         break; // Next task
                     }
                 }
