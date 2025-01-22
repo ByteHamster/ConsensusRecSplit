@@ -16,9 +16,10 @@
 namespace consensus {
 
 // Starting seed at given distance from the root (extracted at random).
-static constexpr uint64_t startSeed[] = {0x106393c187cae21a, 0x6453cec3f7376937, 0x643e521ddbd2be98, 0x3740c6412f6572cb, 0x717d47562f1ce470, 0x4cd6eb4c63befb7c, 0x9bfd8c5e18c8da73,
-      0x082f20e10092a9a3, 0x2ada2ce68d21defc, 0xe33cb4f3e7c6466b, 0x3980be458c509c59, 0xc466fd9584828e8c, 0x45f0aabe1a61ede6, 0xf6e7b8b33ad9b98d,
-      0x4ef95e25f4b4983d, 0x81175195173b92d3, 0x4e50927d8dd15978, 0x1ea2099d1fafae7f, 0x425c8a06fbaaa815, 0xcd4216006c74052a};
+static constexpr uint64_t startSeed[] = {0x106393c187cae21a, 0x6453cec3f7376937, 0x643e521ddbd2be98, 0x3740c6412f6572cb,
+                     0x717d47562f1ce470, 0x4cd6eb4c63befb7c, 0x9bfd8c5e18c8da73, 0x082f20e10092a9a3, 0x2ada2ce68d21defc,
+                     0xe33cb4f3e7c6466b, 0x3980be458c509c59, 0xc466fd9584828e8c, 0x45f0aabe1a61ede6, 0xf6e7b8b33ad9b98d,
+                     0x4ef95e25f4b4983d, 0x81175195173b92d3, 0x4e50927d8dd15978, 0x1ea2099d1fafae7f, 0x425c8a06fbaaa815};
 
 /**
  * Perfect hash function using the consensus idea: Combined search and encoding of successful seeds.
@@ -104,38 +105,56 @@ class ConsensusRecSplitLevelwise {
                 }
             #endif
 
-            for (size_t level = 0; level < logk; level++) {
-                findSeedsForLevel(modifiableKeys, level);
+            constructLevel<0>(modifiableKeys);
+        }
 
-                size_t taskSize = 1ul << (logk - level);
-                assert(modifiableKeys.size() % taskSize == 0);
-                size_t numTasks = modifiableKeys.size() / taskSize;
-                if (taskSize > 2) {
-                    for (size_t task = 0; task < numTasks; task++) {
-                        size_t seedEndPos = SplittingTreeStorage<k, overhead>::seedStartPositionLevelwise(level, task + 1);
-                        uint64_t seed = unalignedBitVectors.at(level).readAt(seedEndPos + ROOT_SEED_BITS) + startSeed[level];
-                        std::partition(modifiableKeys.begin() + task * taskSize,
-                                       modifiableKeys.begin() + (task + 1) * taskSize,
-                                       [&](uint64_t key) { return toLeft(key, seed); });
-                    }
+        template <size_t level>
+        void constructLevel(std::vector<uint64_t> &keys) {
+            constexpr size_t taskSize = 1ul << (logk - level);
+
+            auto beginConstruction = std::chrono::high_resolution_clock::now();
+            findSeedsForLevel<level>(keys);
+
+            if constexpr (taskSize > 2) {
+                assert(keys.size() % taskSize == 0);
+                size_t numTasks = keys.size() / taskSize;
+                for (size_t task = 0; task < numTasks; task++) {
+                    size_t seedEndPos = SplittingTreeStorage<k, overhead>::seedStartPositionLevelwise(level, task + 1);
+                    uint64_t seed = unalignedBitVectors.at(level).readAt(seedEndPos + ROOT_SEED_BITS) + startSeed[level];
+                    std::partition(keys.begin() + task * taskSize,
+                                   keys.begin() + (task + 1) * taskSize,
+                                   [&](uint64_t key) { return toLeft(key, seed); });
                 }
+            }
+            unsigned long constructionDurationMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::high_resolution_clock::now() - beginConstruction).count();
+            size_t numTasks = keys.size() / taskSize;
+            size_t bitsThisLevel = SplittingTreeStorage<k, overhead>::seedStartPositionLevelwise(level, numTasks);
+            std::cout<<"Level "<<level<<" ("<<taskSize<<" keys each): "<<constructionDurationMs<<" ms, "
+                        <<(1000*constructionDurationMs/bitsThisLevel)<<" us per output bit"<<std::endl;
+
+            if constexpr (level + 1 < logk) {
+                constructLevel<level + 1>(keys);
             }
         }
 
+        template <size_t level>
         struct TaskInfo {
             size_t seedStartPos;
             size_t seedEndPos;
             uint64_t seedMask;
 
-            TaskInfo(size_t level, size_t currentTask) {
+            explicit TaskInfo(size_t currentTask) {
                 seedStartPos = SplittingTreeStorage<k, overhead>::seedStartPositionLevelwise(level, currentTask);
                 seedEndPos = SplittingTreeStorage<k, overhead>::seedStartPositionLevelwise(level, currentTask + 1);
                 seedMask = (1ul << (seedEndPos - seedStartPos)) - 1;
             }
         };
 
-        void findSeedsForLevel(const std::vector<uint64_t> &keys, size_t level) {
-            size_t taskSize = 1ul << (logk - level);
+        template <size_t level>
+        void findSeedsForLevel(const std::vector<uint64_t> &keys) {
+            static_assert(level < logk);
+            constexpr size_t taskSize = 1ul << (logk - level);
             size_t numTasks = keys.size() / taskSize;
 
             size_t bitsThisLevel = SplittingTreeStorage<k, overhead>::seedStartPositionLevelwise(level, numTasks);
@@ -145,13 +164,12 @@ class ConsensusRecSplitLevelwise {
             size_t currentTask = 0;
             while (true) {
                 size_t fromKey = currentTask * taskSize;
-                size_t toKey = (currentTask + 1) * taskSize;
-                TaskInfo taskInfo(level, currentTask);
+                TaskInfo<level> taskInfo(currentTask);
                 uint64_t taskSeed = unalignedBitVector.readAt(taskInfo.seedEndPos + ROOT_SEED_BITS);
                 uint64_t taskMaxSeed = taskSeed | taskInfo.seedMask;
 
                 while (true) { // Test all seeds of this task
-                    if (isSeedSuccessful(keys, fromKey, toKey, taskSeed + startSeed[level])) {
+                    if (isSeedSuccessful<taskSize>(keys, fromKey, taskSeed + startSeed[level])) {
                         unalignedBitVector.writeTo(taskInfo.seedEndPos + ROOT_SEED_BITS, taskSeed);
                         currentTask++;
                         if (currentTask == numTasks) {
@@ -171,7 +189,7 @@ class ConsensusRecSplitLevelwise {
                                 break;
                             }
                             currentTask--;
-                            taskInfo = TaskInfo(level, currentTask);
+                            taskInfo = TaskInfo<level>(currentTask);
                             taskSeed = unalignedBitVector.readAt(taskInfo.seedEndPos + ROOT_SEED_BITS);
                         }
                         taskSeed++;
@@ -183,12 +201,13 @@ class ConsensusRecSplitLevelwise {
             }
         }
 
-        bool isSeedSuccessful(const std::vector<uint64_t> &keys, size_t from, size_t to, uint64_t seed) {
+        template <size_t n>
+        bool isSeedSuccessful(const std::vector<uint64_t> &keys, size_t from, uint64_t seed) {
             size_t numToLeft = 0;
-            for (size_t i = from; i < to; i++) {
-                numToLeft += toLeft(keys[i], seed);
+            for (size_t i = 0; i < n; i++) {
+                numToLeft += toLeft(keys[from + i], seed);
             }
-            return numToLeft == (to - from) / 2;
+            return numToLeft == n / 2;
         }
 
         [[nodiscard]] static bool toLeft(uint64_t key, uint64_t seed) {
