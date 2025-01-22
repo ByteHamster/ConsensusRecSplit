@@ -73,7 +73,7 @@ class SplittingTreeStorage {
  * The storage has to be in the same order as the search for consensus to work.
  */
 template <size_t n, double overhead>
-struct SplittingTaskIterator {
+struct SplittingTaskIteratorQueryOptimized {
     static constexpr size_t logn = intLog2(n);
     using TreeStorage = SplittingTreeStorage<n, overhead>;
 
@@ -87,7 +87,7 @@ struct SplittingTaskIterator {
     size_t seedWidth = 0;
     uint64_t seedMask = 0;
 
-    SplittingTaskIterator(size_t level, size_t index, size_t bucket, size_t nbuckets)
+    SplittingTaskIteratorQueryOptimized(size_t level, size_t index, size_t bucket, size_t nbuckets)
             : level(level), index(index), bucket(bucket), nbuckets(nbuckets) {
         updateProperties();
     }

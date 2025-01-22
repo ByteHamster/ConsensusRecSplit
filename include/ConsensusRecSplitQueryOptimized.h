@@ -18,9 +18,10 @@ namespace consensus {
 /**
  * Perfect hash function using the consensus idea: Combined search and encoding of successful seeds.
  * <code>k</code> is the size of each RecSplit base case and must be a power of 2.
+ * Optimized for faster queries by constructing bucket-by-bucket instead of layer-by-layer.
  */
 template <size_t k, double overhead>
-class ConsensusRecSplit {
+class ConsensusRecSplitQueryOptimized {
     public:
         static_assert(1ul << intLog2(k) == k, "k must be a power of 2");
         static_assert(overhead > 0);
@@ -30,7 +31,7 @@ class ConsensusRecSplit {
         UnalignedBitVector unalignedBitVector;
         BumpedKPerfectHashFunction<k> *bucketingPhf = nullptr;
 
-        explicit ConsensusRecSplit(std::span<const std::string> keys)
+        explicit ConsensusRecSplitQueryOptimized(std::span<const std::string> keys)
                 : numKeys(keys.size()),
                   unalignedBitVector(ROOT_SEED_BITS + (numKeys / k) * SplittingTreeStorage<k, overhead>::totalSize()) {
             std::vector<uint64_t> hashedKeys;
@@ -41,13 +42,13 @@ class ConsensusRecSplit {
             startSearch(hashedKeys);
         }
 
-        explicit ConsensusRecSplit(std::span<const uint64_t> keys)
+        explicit ConsensusRecSplitQueryOptimized(std::span<const uint64_t> keys)
                 : numKeys(keys.size()),
                   unalignedBitVector(ROOT_SEED_BITS + (numKeys / k) * SplittingTreeStorage<k, overhead>::totalSize()) {
             startSearch(keys);
         }
 
-        ~ConsensusRecSplit() {
+        ~ConsensusRecSplitQueryOptimized() {
             delete bucketingPhf;
         }
 
@@ -65,7 +66,7 @@ class ConsensusRecSplit {
             if (bucket >= nbuckets) {
                 return bucket; // Fallback if numKeys does not divide n
             }
-            SplittingTaskIterator<k, overhead> task(0, 0, bucket, numKeys / k);
+            SplittingTaskIteratorQueryOptimized<k, overhead> task(0, 0, bucket, numKeys / k);
             for (size_t level = 0; level < logk; level++) {
                 task.setLevel(level);
                 if (toLeft(key, readSeed(task))) {
@@ -109,7 +110,7 @@ class ConsensusRecSplit {
         }
 
         bool construct(std::span<uint64_t> keys) {
-            SplittingTaskIterator<k, overhead> task(0, 0, 0, numKeys / k);
+            SplittingTaskIteratorQueryOptimized<k, overhead> task(0, 0, 0, numKeys / k);
             uint64_t seed = readSeed(task);
             while (true) { // Basically "while (!task.isEnd())"
                 size_t keysBegin = task.bucket * k + task.index * task.taskSizeThisLevel;
@@ -162,11 +163,11 @@ class ConsensusRecSplit {
             return bytehamster::util::remix(key + seed) % 2;
         }
 
-        [[nodiscard]] uint64_t readSeed(SplittingTaskIterator<k, overhead> task) const {
+        [[nodiscard]] uint64_t readSeed(SplittingTaskIteratorQueryOptimized<k, overhead> task) const {
             return unalignedBitVector.readAt(task.endPosition + ROOT_SEED_BITS);
         }
 
-        void writeSeed(SplittingTaskIterator<k, overhead> task, uint64_t seed) {
+        void writeSeed(SplittingTaskIteratorQueryOptimized<k, overhead> task, uint64_t seed) {
             unalignedBitVector.writeTo(task.endPosition + ROOT_SEED_BITS, seed);
         }
 };

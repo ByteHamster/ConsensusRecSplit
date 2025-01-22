@@ -6,7 +6,7 @@
 #include <tlx/cmdline_parser.hpp>
 
 #include "BenchmarkData.h"
-#include "ConsensusRecSplit.h"
+#include "ConsensusRecSplitQueryOptimized.h"
 #include "ConsensusRecSplitLevelwise.h"
 
 #define DO_NOT_OPTIMIZE(value) asm volatile("" : : "r,m"(value) : "memory")
