@@ -7,7 +7,7 @@
 
 #include "BenchmarkData.h"
 #include "ConsensusRecSplitQueryOptimized.h"
-#include "ConsensusRecSplitLevelwise.h"
+#include "ConsensusRecSplit.h"
 
 #define DO_NOT_OPTIMIZE(value) asm volatile("" : : "r,m"(value) : "memory")
 
@@ -34,7 +34,7 @@ void construct() {
     std::cout<<"Constructing"<<std::endl;
     sleep(1);
     auto beginConstruction = std::chrono::high_resolution_clock::now();
-    consensus::ConsensusRecSplitLevelwise<k, overhead> hashFunc(keys);
+    consensus::ConsensusRecSplit<k, overhead> hashFunc(keys);
     unsigned long constructionDurationMs = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::high_resolution_clock::now() - beginConstruction).count();
 

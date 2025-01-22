@@ -23,11 +23,10 @@ static constexpr uint64_t startSeed[] = {0x106393c187cae21a, 0x6453cec3f7376937,
 
 /**
  * Perfect hash function using the consensus idea: Combined search and encoding of successful seeds.
- * Level-wise construction: Faster construction but has more cache faults when querying.
  * <code>k</code> is the size of each RecSplit base case and must be a power of 2.
  */
 template <size_t k, double overhead>
-class ConsensusRecSplitLevelwise {
+class ConsensusRecSplit {
     public:
         static_assert(1ul << intLog2(k) == k, "k must be a power of 2");
         static_assert(overhead > 0);
@@ -37,7 +36,7 @@ class ConsensusRecSplitLevelwise {
         std::array<UnalignedBitVector, logk> unalignedBitVectors;
         BumpedKPerfectHashFunction<k> *bucketingPhf = nullptr;
 
-        explicit ConsensusRecSplitLevelwise(std::span<const std::string> keys) : numKeys(keys.size()) {
+        explicit ConsensusRecSplit(std::span<const std::string> keys) : numKeys(keys.size()) {
             std::vector<uint64_t> hashedKeys;
             hashedKeys.reserve(keys.size());
             for (const std::string &key : keys) {
@@ -46,11 +45,11 @@ class ConsensusRecSplitLevelwise {
             startSearch(hashedKeys);
         }
 
-        explicit ConsensusRecSplitLevelwise(std::span<const uint64_t> keys) : numKeys(keys.size()) {
+        explicit ConsensusRecSplit(std::span<const uint64_t> keys) : numKeys(keys.size()) {
             startSearch(keys);
         }
 
-        ~ConsensusRecSplitLevelwise() {
+        ~ConsensusRecSplit() {
             delete bucketingPhf;
         }
 
