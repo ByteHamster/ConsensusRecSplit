@@ -25,7 +25,6 @@ class ConsensusRecSplitQueryOptimized {
     public:
         static_assert(1ul << intLog2(k) == k, "k must be a power of 2");
         static_assert(overhead > 0);
-        static constexpr size_t ROOT_SEED_BITS = 64;
         static constexpr size_t logk = intLog2(k);
         size_t numKeys = 0;
         UnalignedBitVector unalignedBitVector;
@@ -33,7 +32,7 @@ class ConsensusRecSplitQueryOptimized {
 
         explicit ConsensusRecSplitQueryOptimized(std::span<const std::string> keys)
                 : numKeys(keys.size()),
-                  unalignedBitVector(ROOT_SEED_BITS + (numKeys / k) * SplittingTreeStorage<k, overhead>::totalSize()) {
+                  unalignedBitVector((numKeys / k) * SplittingTreeStorage<k, overhead>::totalSize()) {
             std::vector<uint64_t> hashedKeys;
             hashedKeys.reserve(keys.size());
             for (const std::string &key : keys) {
@@ -44,7 +43,7 @@ class ConsensusRecSplitQueryOptimized {
 
         explicit ConsensusRecSplitQueryOptimized(std::span<const uint64_t> keys)
                 : numKeys(keys.size()),
-                  unalignedBitVector(ROOT_SEED_BITS + (numKeys / k) * SplittingTreeStorage<k, overhead>::totalSize()) {
+                  unalignedBitVector((numKeys / k) * SplittingTreeStorage<k, overhead>::totalSize()) {
             startSearch(keys);
         }
 
@@ -100,8 +99,8 @@ class ConsensusRecSplitQueryOptimized {
                 }
             #endif
 
-            for (size_t rootSeed = 0; rootSeed < (1ul << (ROOT_SEED_BITS - 1)); rootSeed++) {
-                unalignedBitVector.writeTo(ROOT_SEED_BITS, rootSeed);
+            for (size_t rootSeed = 0; rootSeed < (1ul << 63); rootSeed++) {
+                unalignedBitVector.writeRootSeed(rootSeed);
                 if (construct(modifiableKeys)) {
                     return;
                 }
@@ -164,11 +163,11 @@ class ConsensusRecSplitQueryOptimized {
         }
 
         [[nodiscard]] uint64_t readSeed(SplittingTaskIteratorQueryOptimized<k, overhead> task) const {
-            return unalignedBitVector.readAt(task.endPosition + ROOT_SEED_BITS);
+            return unalignedBitVector.readAt(task.endPosition);
         }
 
         void writeSeed(SplittingTaskIteratorQueryOptimized<k, overhead> task, uint64_t seed) {
-            unalignedBitVector.writeTo(task.endPosition + ROOT_SEED_BITS, seed);
+            unalignedBitVector.writeTo(task.endPosition, seed);
         }
 };
 } // namespace consensus

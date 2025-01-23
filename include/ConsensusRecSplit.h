@@ -14,13 +14,6 @@
 #include "consensus/BumpedKPerfectHashFunction.h"
 
 namespace consensus {
-
-// Starting seed at given distance from the root (extracted at random).
-static constexpr uint64_t startSeed[] = {0x106393c187cae21a, 0x6453cec3f7376937, 0x643e521ddbd2be98, 0x3740c6412f6572cb,
-                     0x717d47562f1ce470, 0x4cd6eb4c63befb7c, 0x9bfd8c5e18c8da73, 0x082f20e10092a9a3, 0x2ada2ce68d21defc,
-                     0xe33cb4f3e7c6466b, 0x3980be458c509c59, 0xc466fd9584828e8c, 0x45f0aabe1a61ede6, 0xf6e7b8b33ad9b98d,
-                     0x4ef95e25f4b4983d, 0x81175195173b92d3, 0x4e50927d8dd15978, 0x1ea2099d1fafae7f, 0x425c8a06fbaaa815};
-
 /**
  * Perfect hash function using the consensus idea: Combined search and encoding of successful seeds.
  * <code>k</code> is the size of each RecSplit base case and must be a power of 2.
@@ -30,7 +23,6 @@ class ConsensusRecSplit {
     public:
         static_assert(1ul << intLog2(k) == k, "k must be a power of 2");
         static_assert(overhead > 0);
-        static constexpr size_t ROOT_SEED_BITS = 64;
         static constexpr size_t logk = intLog2(k);
         size_t numKeys = 0;
         std::array<UnalignedBitVector, logk> unalignedBitVectors;
@@ -74,8 +66,8 @@ class ConsensusRecSplit {
             size_t taskIdx = bucket;
             for (size_t level = 0; level < logk; level++) {
                 size_t seedEndPos = SplittingTreeStorage<k, overhead>::seedStartPositionLevelwise(level, taskIdx + 1);
-                uint64_t seed = unalignedBitVectors.at(level).readAt(seedEndPos + ROOT_SEED_BITS);
-                if (toLeft(key, seed + startSeed[level])) {
+                uint64_t seed = unalignedBitVectors.at(level).readAt(seedEndPos);
+                if (toLeft(key, seed)) {
                     taskIdx = 2 * taskIdx;
                 } else {
                     taskIdx = 2 * taskIdx + 1;
@@ -119,7 +111,7 @@ class ConsensusRecSplit {
                 size_t numTasks = keys.size() / taskSize;
                 for (size_t task = 0; task < numTasks; task++) {
                     size_t seedEndPos = SplittingTreeStorage<k, overhead>::seedStartPositionLevelwise(level, task + 1);
-                    uint64_t seed = unalignedBitVectors.at(level).readAt(seedEndPos + ROOT_SEED_BITS) + startSeed[level];
+                    uint64_t seed = unalignedBitVectors.at(level).readAt(seedEndPos);
                     std::partition(keys.begin() + task * taskSize,
                                    keys.begin() + (task + 1) * taskSize,
                                    [&](uint64_t key) { return toLeft(key, seed); });
@@ -145,11 +137,11 @@ class ConsensusRecSplit {
 
             size_t bitsThisLevel = SplittingTreeStorage<k, overhead>::seedStartPositionLevelwise(level, numTasks);
             UnalignedBitVector &unalignedBitVector = unalignedBitVectors.at(level);
-            unalignedBitVector.clearAndResize(ROOT_SEED_BITS + bitsThisLevel);
+            unalignedBitVector.clearAndResize(bitsThisLevel);
 
-            SplittingTaskIteratorLevelwise<k, overhead, level, ROOT_SEED_BITS> task(0, unalignedBitVector);
+            SplittingTaskIteratorLevelwise<k, overhead, level> task(0, unalignedBitVector);
             while (true) {
-                if (isSeedSuccessful<taskSize>(keys, task.fromKey, task.seed + startSeed[level])) {
+                if (isSeedSuccessful<taskSize>(keys, task.fromKey, task.seed)) {
                     task.writeSeed();
                     if (task.idx + 1 == numTasks) [[unlikely]] {
                         return; // Success
@@ -165,8 +157,8 @@ class ConsensusRecSplit {
                         // Clear task seed and increment root seed
                         task.seed &= ~task.seedMask;
                         task.writeSeed();
-                        uint64_t rootSeed = unalignedBitVector.readAt(ROOT_SEED_BITS);
-                        unalignedBitVector.writeTo(ROOT_SEED_BITS, rootSeed + 1);
+                        uint64_t rootSeed = unalignedBitVector.readRootSeed();
+                        unalignedBitVector.writeRootSeed(rootSeed + 1);
                         task.readSeed();
                     } else {
                         task.seed++;

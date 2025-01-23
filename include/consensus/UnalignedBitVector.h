@@ -14,12 +14,12 @@ class UnalignedBitVector {
         explicit UnalignedBitVector() : bits(0) {
         }
 
-        explicit UnalignedBitVector(size_t size) : bits((size + 63) / 64) {
+        explicit UnalignedBitVector(size_t size) : bits((size + 64 + 63) / 64) {
         }
 
         void clearAndResize(size_t size) {
             bits.clear();
-            bits.resize((size + 63) / 64);
+            bits.resize((size + 64 + 63) / 64);
         }
 
         /**
@@ -31,10 +31,10 @@ class UnalignedBitVector {
             assert(bitPosition >= 64);
             assert(bitPosition / 64 <= bits.size());
             if (bitPosition % 64 == 0) {
-                return bits[(bitPosition / 64) - 1];
+                return bits[(bitPosition / 64)];
             } else {
-                return (bits[(bitPosition / 64) - 1] << (bitPosition % 64))
-                       | (bits[(bitPosition / 64)] >> (64 - (bitPosition % 64)));
+                return (bits[(bitPosition / 64)] << (bitPosition % 64))
+                       | (bits[(bitPosition / 64) + 1] >> (64 - (bitPosition % 64)));
             }
         }
 
@@ -46,15 +46,22 @@ class UnalignedBitVector {
             assert(bitPosition >= 64);
             assert(bitPosition / 64 <= bits.size());
             if (bitPosition % 64 == 0) {
-                bits[(bitPosition / 64) - 1] = value;
+                bits[(bitPosition / 64)] = value;
             } else {
-                bits[(bitPosition / 64) - 1] &= ~(~0ul >> (bitPosition % 64));
-                bits[(bitPosition / 64) - 1] |= value >> (bitPosition % 64);
-                bits[(bitPosition / 64)] &= ~(~0ul << (64 - (bitPosition % 64)));
-                bits[(bitPosition / 64)] |= value << (64 - (bitPosition % 64));
+                bits[(bitPosition / 64)] &= ~(~0ul >> (bitPosition % 64));
+                bits[(bitPosition / 64)] |= value >> (bitPosition % 64);
+                bits[(bitPosition / 64) + 1] &= ~(~0ul << (64 - (bitPosition % 64)));
+                bits[(bitPosition / 64) + 1] |= value << (64 - (bitPosition % 64));
             }
         }
 
+        [[nodiscard]] inline uint64_t readRootSeed() const {
+            return bits[0];
+        }
+
+        void inline writeRootSeed(uint64_t value) {
+            bits[0] = value;
+        }
         [[nodiscard]] size_t bitSize() const {
             return bits.size() * 64;
         }

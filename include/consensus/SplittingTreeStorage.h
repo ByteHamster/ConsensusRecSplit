@@ -147,7 +147,7 @@ struct SplittingTaskIteratorQueryOptimized {
     }
 };
 
-template <size_t k, double overhead, size_t level, size_t ROOT_SEED_BITS>
+template <size_t k, double overhead, size_t level>
 struct SplittingTaskIteratorLevelwise {
     static constexpr size_t logk = intLog2(k);
     static constexpr size_t taskSize = 1ul << (logk - level);
@@ -175,7 +175,7 @@ struct SplittingTaskIteratorLevelwise {
     }
 
     void readSeed() {
-        seed = unalignedBitVector.readAt(seedEndPos + ROOT_SEED_BITS);
+        seed = unalignedBitVector.readAt(seedEndPos);
         maxSeed = seed | seedMask;
     }
 
@@ -193,7 +193,7 @@ struct SplittingTaskIteratorLevelwise {
     }
 
     void writeSeed() {
-        unalignedBitVector.writeTo(seedEndPos + ROOT_SEED_BITS, seed);
+        unalignedBitVector.writeTo(seedEndPos, seed);
     }
 
     bool isFirst() {
