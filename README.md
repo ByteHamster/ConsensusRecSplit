@@ -37,7 +37,7 @@ You can construct a ConsensusRecSplit perfect hash function as follows.
 
 ```cpp
 std::vector<std::string> keys = {"abc", "def", "123", "456"};
-consensus::ConsensusRecSplit<> hashFunc(keys, /* overhead = */ 0.01f);
+consensus::ConsensusRecSplit</* k */ 4096, /* overhead */ 0.01> hashFunc(keys);
 std::cout << hashFunc("abc") << std::endl;
 ```
 

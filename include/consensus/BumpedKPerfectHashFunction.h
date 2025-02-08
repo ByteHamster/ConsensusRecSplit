@@ -45,10 +45,10 @@ class BumpedKPerfectHashFunction {
         pasta::FlatRankSelect<pasta::OptimizedFor::ONE_QUERIES> *freePositionsRankSelect = nullptr;
     public:
         explicit BumpedKPerfectHashFunction(std::span<const uint64_t> keys)
-                : N(keys.size()), thresholds(N / k) {
+                : N(keys.size()), thresholds(std::max(1ul, N / k)) {
             size_t nbuckets = N / k;
             size_t keysInEndBucket = N - nbuckets * k;
-            size_t bucketsThisLayer = std::max(1ul, (size_t) std::ceil(OVERLOAD_FACTOR * nbuckets));
+            size_t bucketsThisLayer = (size_t) std::ceil(OVERLOAD_FACTOR * nbuckets);
             std::vector<size_t> freePositions;
             std::vector<KeyInfo> hashes;
             hashes.reserve(keys.size());
@@ -62,13 +62,16 @@ class BumpedKPerfectHashFunction {
             layerInfo.push_back(LayerInfo{ 0, 0 });
             for (size_t layer = 0; layer < 2; layer++) {
                 const size_t layerBase = layerInfo.back().base;
+                if (bucketsThisLayer == 0) {
+                    break;
+                }
                 if (layer != 0) {
                     assert(layer == 1);
-                    bucketsThisLayer = nbuckets - layerBase;
-                    if (bucketsThisLayer == 0) {
+                    if (nbuckets <= layerBase) {
                         // Just keep 1 layer in this data structure
                         break;
                     }
+                    bucketsThisLayer = nbuckets - layerBase;
                     // Rehash
                     for (auto & hash : hashes) {
                         hash.mhc = ::bytehamster::util::remix(hash.mhc);

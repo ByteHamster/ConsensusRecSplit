@@ -96,7 +96,9 @@ class ConsensusRecSplit {
                 }
             #endif
 
-            constructLevel<0>(modifiableKeys);
+            if (!modifiableKeys.empty()) {
+                constructLevel<0>(modifiableKeys);
+            }
         }
 
         template <size_t level>

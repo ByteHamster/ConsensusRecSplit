@@ -25,10 +25,8 @@ class UnalignedBitVector {
         /**
          * Read a full 64-bit word at the unaligned bit position.
          * The bit position refers to the right-most bit to read.
-         * The smallest position that can be read is 64.
          */
         [[nodiscard]] inline uint64_t readAt(size_t bitPosition) const {
-            assert(bitPosition >= 64);
             assert(bitPosition / 64 <= bits.size());
             if (bitPosition % 64 == 0) {
                 return bits[(bitPosition / 64)];
@@ -43,7 +41,6 @@ class UnalignedBitVector {
          * The bit position refers to the right-most bit to write.
          */
         void inline writeTo(size_t bitPosition, uint64_t value) {
-            assert(bitPosition >= 64);
             assert(bitPosition / 64 <= bits.size());
             if (bitPosition % 64 == 0) {
                 bits[(bitPosition / 64)] = value;
