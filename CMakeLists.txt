@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 3.25)
+cmake_minimum_required (VERSION 3.25..4.0)
 cmake_policy(SET CMP0048 NEW)
 project(ConsensusRecSplit LANGUAGES CXX)
 
