@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "If you use this software in an academic context or publication, please cite it as below."
+authors:
+- family-names: "Lehmann"
+  given-names: "Hans-Peter"
+- family-names: "Sanders"
+  given-names: "Peter"
+- family-names: "Walzer"
+  given-names: "Stefan"
+- family-names: "Ziegler"
+  given-names: "Jonatan"
+title: "Combined Search and Encoding for Seeds, with an Application to Minimal Perfect Hashing"
+preferred-citation:
+  title: "Combined Search and Encoding for Seeds, with an Application to Minimal Perfect Hashing"
+  authors:
+    - family-names: "Lehmann"
+      given-names: "Hans-Peter"
+    - family-names: "Sanders"
+      given-names: "Peter"
+    - family-names: "Walzer"
+      given-names: "Stefan"
+    - family-names: "Ziegler"
+      given-names: "Jonatan"
+  doi: "10.48550/ARXIV.2502.05613"
+  year: 2025

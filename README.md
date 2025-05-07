@@ -43,3 +43,16 @@ std::cout << hashFunc("abc") << std::endl;
 
 ### Licensing
 This code is licensed under the [GPLv3](/LICENSE).
+
+If you use this work in an academic context or publication, please cite our paper:
+
+```
+@article{lehmann2025consensus,
+  author = {Hans-Peter Lehmann and Peter Sanders and Stefan Walzer and Jonatan Ziegler},
+  title = {Combined Search and Encoding for Seeds, with an Application to Minimal Perfect Hashing},
+  journal = {CoRR},
+  volume = {abs/2502.05613},
+  year = {2025},
+  doi = {10.48550/ARXIV.2502.05613}
+}
+```
