@@ -19,12 +19,31 @@ class SplittingTreeStorageQueryOptimized {
         static constexpr size_t logn = intLog2(n);
         static constexpr auto microBitsForSplitOnLevelLookup = SplittingTreeStorageLevelwise<n, overhead>::microBitsForSplitOnLevelLookup;
 
+        static constexpr size_t microBitsForFirstSplitOnLevel(size_t level) {
+            // Additional bits for epsilon scaling takes the size of the previous level
+            double bits = optimalBitsForSplit[logn - level];
+            double previousSize = 2 * (1ul << (logn - level));
+            bits += overhead / 3.4 * std::pow(previousSize, 0.75) + 1.0 / logn;
+            return std::ceil(1024.0 * 1024.0 * bits);
+        }
+
+        static constexpr std::array<size_t, logn> fillMicroBitsForFirstSplitLookup() {
+            std::array<size_t, logn> array;
+            for (size_t level = 0; level < logn; level++) {
+                array[level] = microBitsForFirstSplitOnLevel(level);
+            }
+            return array;
+        }
+
+        static constexpr std::array<size_t, logn> microBitsForFirstSplitOnLevelLookup = fillMicroBitsForFirstSplitLookup();
+
         static constexpr std::array<size_t, logn + 1> fillMicroBitsLevelSize() {
             std::array<size_t, logn + 1> array;
             size_t microBits = 0;
             for (size_t level = 0; level < logn; level++) {
                 array[level] = microBits;
-                microBits += microBitsForSplitOnLevelLookup[level] * (1ul << level);
+                size_t ntasks = (1ul << level);
+                microBits += microBitsForSplitOnLevelLookup[level] * (ntasks - 1) + microBitsForFirstSplitOnLevelLookup[level];
             }
             array[logn] = microBits;
             return array;
@@ -34,7 +53,12 @@ class SplittingTreeStorageQueryOptimized {
 
     public:
         static size_t seedStartPosition(size_t level, size_t index) {
-            return (microBitsLevelSize[level] + microBitsForSplitOnLevelLookup[level] * index) / (1024 * 1024);
+            size_t microBits = microBitsLevelSize[level];
+            if (index > 0) {
+                microBits += microBitsForSplitOnLevelLookup[level] * (index - 1)
+                           + microBitsForFirstSplitOnLevelLookup[level];
+            }
+            return microBits / (1024 * 1024);
         }
 
         static constexpr size_t totalSize() {

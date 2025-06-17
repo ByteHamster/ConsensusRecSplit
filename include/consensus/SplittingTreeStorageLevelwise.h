@@ -8,6 +8,9 @@
 
 namespace consensus {
 
+template <size_t n, double overhead>
+class SplittingTreeStorageQueryOptimized;
+
 // sage: print(0, [N(log((2**(2**i))/binomial(2**i, (2**i)/2), 2)) for i in [1..20]], sep=', ')
 constexpr std::array<double, 21> optimalBitsForSplit = {0, 1.00000000000000, 1.41503749927884, 1.87071698305503,
             2.34827556689194, 2.83701728740494, 3.33138336299656, 3.82856579982622, 4.32715694302912, 4.82645250522622,
@@ -25,6 +28,7 @@ static constexpr size_t intLog2(size_t x) {
 template <size_t n, double overhead>
 class SplittingTreeStorageLevelwise {
     private:
+        friend class SplittingTreeStorageQueryOptimized<n, overhead>;
         static constexpr size_t logn = intLog2(n);
 
         static constexpr size_t microBitsForSplitOnLevel(size_t level) {
