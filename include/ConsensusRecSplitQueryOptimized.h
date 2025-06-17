@@ -10,7 +10,7 @@
 #include <bytehamster/util/Function.h>
 
 #include "consensus/UnalignedBitVector.h"
-#include "consensus/SplittingTreeStorage.h"
+#include "consensus/SplittingTreeStorageQueryOptimized.h"
 #include "consensus/BumpedKPerfectHashFunction.h"
 
 namespace consensus {
@@ -32,7 +32,7 @@ class ConsensusRecSplitQueryOptimized {
 
         explicit ConsensusRecSplitQueryOptimized(std::span<const std::string> keys)
                 : numKeys(keys.size()),
-                  unalignedBitVector((numKeys / k) * SplittingTreeStorage<k, overhead>::totalSize()) {
+                  unalignedBitVector((numKeys / k) * SplittingTreeStorageQueryOptimized<k, overhead>::totalSize()) {
             std::vector<uint64_t> hashedKeys;
             hashedKeys.reserve(keys.size());
             for (const std::string &key : keys) {
@@ -43,7 +43,7 @@ class ConsensusRecSplitQueryOptimized {
 
         explicit ConsensusRecSplitQueryOptimized(std::span<const uint64_t> keys)
                 : numKeys(keys.size()),
-                  unalignedBitVector((numKeys / k) * SplittingTreeStorage<k, overhead>::totalSize()) {
+                  unalignedBitVector((numKeys / k) * SplittingTreeStorageQueryOptimized<k, overhead>::totalSize()) {
             startSearch(keys);
         }
 
@@ -79,7 +79,7 @@ class ConsensusRecSplitQueryOptimized {
 
     private:
         void startSearch(std::span<const uint64_t> keys) {
-            std::cout << "Tree space per bucket: " << SplittingTreeStorage<k, overhead>::totalSize() << std::endl;
+            std::cout << "Tree space per bucket: " << SplittingTreeStorageQueryOptimized<k, overhead>::totalSize() << std::endl;
 
             bucketingPhf = new BumpedKPerfectHashFunction<k>(keys);
             size_t nbuckets = keys.size() / k;

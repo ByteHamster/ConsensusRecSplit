@@ -10,7 +10,7 @@
 #include <bytehamster/util/Function.h>
 
 #include "consensus/UnalignedBitVector.h"
-#include "consensus/SplittingTreeStorage.h"
+#include "consensus/SplittingTreeStorageLevelwise.h"
 #include "consensus/BumpedKPerfectHashFunction.h"
 
 namespace consensus {
@@ -65,7 +65,7 @@ class ConsensusRecSplit {
             }
             size_t taskIdx = bucket;
             for (size_t level = 0; level < logk; level++) {
-                size_t seedEndPos = SplittingTreeStorage<k, overhead>::seedStartPositionLevelwise(level, taskIdx + 1);
+                size_t seedEndPos = SplittingTreeStorageLevelwise<k, overhead>::seedStartPosition(level, taskIdx + 1);
                 uint64_t seed = unalignedBitVectors.at(level).readAt(seedEndPos);
                 if (toLeft(key, seed)) {
                     taskIdx = 2 * taskIdx;
@@ -112,7 +112,7 @@ class ConsensusRecSplit {
                 assert(keys.size() % taskSize == 0);
                 size_t numTasks = keys.size() / taskSize;
                 for (size_t task = 0; task < numTasks; task++) {
-                    size_t seedEndPos = SplittingTreeStorage<k, overhead>::seedStartPositionLevelwise(level, task + 1);
+                    size_t seedEndPos = SplittingTreeStorageLevelwise<k, overhead>::seedStartPosition(level, task + 1);
                     uint64_t seed = unalignedBitVectors.at(level).readAt(seedEndPos);
                     std::partition(keys.begin() + task * taskSize,
                                    keys.begin() + (task + 1) * taskSize,
@@ -122,7 +122,7 @@ class ConsensusRecSplit {
             unsigned long constructionDurationMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::high_resolution_clock::now() - beginConstruction).count();
             size_t numTasks = keys.size() / taskSize;
-            size_t bitsThisLevel = SplittingTreeStorage<k, overhead>::seedStartPositionLevelwise(level, numTasks);
+            size_t bitsThisLevel = SplittingTreeStorageLevelwise<k, overhead>::seedStartPosition(level, numTasks);
             std::cout<<"Level "<<level<<" ("<<taskSize<<" keys each): "<<constructionDurationMs<<" ms, "
                         <<(1000*constructionDurationMs/bitsThisLevel)<<" us per output bit"<<std::endl;
 
@@ -137,7 +137,7 @@ class ConsensusRecSplit {
             constexpr size_t taskSize = 1ul << (logk - level);
             size_t numTasks = keys.size() / taskSize;
 
-            size_t bitsThisLevel = SplittingTreeStorage<k, overhead>::seedStartPositionLevelwise(level, numTasks);
+            size_t bitsThisLevel = SplittingTreeStorageLevelwise<k, overhead>::seedStartPosition(level, numTasks);
             UnalignedBitVector &unalignedBitVector = unalignedBitVectors.at(level);
             unalignedBitVector.clearAndResize(bitsThisLevel);
 
