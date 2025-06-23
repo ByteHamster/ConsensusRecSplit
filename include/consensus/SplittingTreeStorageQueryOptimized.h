@@ -20,11 +20,11 @@ class SplittingTreeStorageQueryOptimized {
         static constexpr auto microBitsForSplitOnLevelLookup = SplittingTreeStorageLevelwise<n, overhead>::microBitsForSplitOnLevelLookup;
 
         static constexpr size_t microBitsForFirstSplitOnLevel(size_t level) {
-            // Additional bits for epsilon scaling takes the size of the previous level
-            double bits = optimalBitsForSplit[logn - level];
-            double previousSize = 2 * (1ul << (logn - level));
-            bits += overhead / 3.4 * std::pow(previousSize, 0.75) + 1.0 / logn;
-            return std::ceil(1024.0 * 1024.0 * bits);
+            if (level == 0) { // Root
+                return microBitsForSplitOnLevelLookup[0]
+                        - std::min(logn * 750000ul, microBitsForSplitOnLevelLookup[0]);
+            }
+            return microBitsForSplitOnLevelLookup[level] + 750000ul;
         }
 
         static constexpr std::array<size_t, logn> fillMicroBitsForFirstSplitLookup() {
