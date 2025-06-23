@@ -15,7 +15,7 @@ size_t numObjects = 1e6;
 size_t numQueries = 1e6;
 double spaceOverhead = 0.01;
 
-template <size_t k, double overhead>
+template <size_t k, double overhead, template<size_t, double> class Phf>
 void construct() {
     auto time = std::chrono::system_clock::now();
     long seed = std::chrono::duration_cast<std::chrono::milliseconds>(time.time_since_epoch()).count();
@@ -34,7 +34,7 @@ void construct() {
     std::cout<<"Constructing"<<std::endl;
     sleep(1);
     auto beginConstruction = std::chrono::high_resolution_clock::now();
-    consensus::ConsensusRecSplit<k, overhead> hashFunc(keys);
+    Phf<k, overhead> hashFunc(keys);
     unsigned long constructionDurationMs = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::high_resolution_clock::now() - beginConstruction).count();
 
@@ -85,44 +85,56 @@ void construct() {
               << std::endl;
 }
 
-template <size_t k, double overhead>
+template <size_t k, double overhead, template<size_t, double> class Phf>
 void dispatchBucketSize(size_t param) {
-    if constexpr (k <= 4) {
+    if constexpr (k <= 16) {
         std::cerr << "The parameter " << param << " for k was not compiled into this binary." << std::endl;
     } else if (k == param) {
-        construct<k, overhead>();
+        construct<k, overhead, Phf>();
     } else {
-        dispatchBucketSize<k / 2, overhead>(param);
+        dispatchBucketSize<k / 2, overhead, Phf>(param);
+    }
+}
+
+template <template<size_t, double> class Phf>
+void dispatchSpaceOverhead(double spaceOverhead, size_t bucketSize) {
+    if (spaceOverhead == 0.5) {
+        dispatchBucketSize<1ul << 15, 0.5, Phf>(bucketSize);
+    } else if (spaceOverhead == 0.3) {
+        dispatchBucketSize<1ul << 15, 0.3, Phf>(bucketSize);
+    } else if (spaceOverhead == 0.1) {
+        dispatchBucketSize<1ul << 15, 0.1, Phf>(bucketSize);
+    } else if (spaceOverhead == 0.03) {
+        dispatchBucketSize<1ul << 15, 0.03, Phf>(bucketSize);
+    } else if (spaceOverhead == 0.01) {
+        dispatchBucketSize<1ul << 15, 0.01, Phf>(bucketSize);
+    } else if (spaceOverhead == 0.001) {
+        dispatchBucketSize<1ul << 15, 0.001, Phf>(bucketSize);
+    } else {
+        std::cerr << "The parameter " << spaceOverhead << " for spaceOverhead was not compiled into this binary." << std::endl;
     }
 }
 
 int main(int argc, const char* const* argv) {
     size_t bucketSize = 8192;
+    bool useQueryOptimized = false;
 
     tlx::CmdlineParser cmd;
     cmd.add_bytes('n', "numObjects", numObjects, "Number of objects to construct with");
     cmd.add_bytes('k', "bucketSize", bucketSize, "Bucket size of the initial partitioning");
     cmd.add_bytes('q', "numQueries", numQueries, "Number of queries to measure");
     cmd.add_double('e', "overhead", spaceOverhead, "Overhead parameter");
+    cmd.add_flag('o', "queryOptimized", useQueryOptimized, "Use the query optimized version");
 
     if (!cmd.process(argc, argv)) {
         return 1;
     }
 
-    if (spaceOverhead == 0.5) {
-        dispatchBucketSize<1ul << 15, 0.5>(bucketSize);
-    } else if (spaceOverhead == 0.3) {
-        dispatchBucketSize<1ul << 15, 0.3>(bucketSize);
-    } else if (spaceOverhead == 0.1) {
-        dispatchBucketSize<1ul << 15, 0.1>(bucketSize);
-    } else if (spaceOverhead == 0.03) {
-        dispatchBucketSize<1ul << 15, 0.03>(bucketSize);
-    } else if (spaceOverhead == 0.01) {
-        dispatchBucketSize<1ul << 15, 0.01>(bucketSize);
-    } else if (spaceOverhead == 0.001) {
-        dispatchBucketSize<1ul << 15, 0.001>(bucketSize);
+    if (useQueryOptimized) {
+        dispatchSpaceOverhead<consensus::ConsensusRecSplitQueryOptimized>(spaceOverhead, bucketSize);
     } else {
-        std::cerr << "The parameter " << spaceOverhead << " for spaceOverhead was not compiled into this binary." << std::endl;
+        dispatchSpaceOverhead<consensus::ConsensusRecSplit>(spaceOverhead, bucketSize);
     }
+
     return 0;
 }
