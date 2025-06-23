@@ -14,6 +14,8 @@
 size_t numObjects = 1e6;
 size_t numQueries = 1e6;
 double spaceOverhead = 0.01;
+size_t bucketSize = 8192;
+bool useQueryOptimized = false;
 
 template <size_t k, double overhead, template<size_t, double> class Phf>
 void construct() {
@@ -74,7 +76,7 @@ void construct() {
             std::chrono::high_resolution_clock::now() - beginQueries).count();
 
     std::cout << "RESULT"
-              << " method=Consensus"
+              << " method=Consensus" + std::string(useQueryOptimized ? "QueryOptimized" : "")
               << " overhead=" << overhead
               << " k=" << k
               << " N=" << numObjects
@@ -116,9 +118,6 @@ void dispatchSpaceOverhead(double spaceOverhead, size_t bucketSize) {
 }
 
 int main(int argc, const char* const* argv) {
-    size_t bucketSize = 8192;
-    bool useQueryOptimized = false;
-
     tlx::CmdlineParser cmd;
     cmd.add_bytes('n', "numObjects", numObjects, "Number of objects to construct with");
     cmd.add_bytes('k', "bucketSize", bucketSize, "Bucket size of the initial partitioning");
